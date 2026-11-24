@@ -1,0 +1,24 @@
+{
+  "comment": "Drop your custom Blender .glb/.gltf exports into public/models/ and list them here! Set any entry to a path like '/models/ball.glb' or '/models/players/mbappe.glb' and the 3D engine will automatically swap it in.",
+  "ball": null,
+  "defaultPlayer": null,
+  "players": {
+    "mbappe": null,
+    "haaland": null,
+    "messi": null,
+    "vinicius": null,
+    "bellingham": null,
+    "yamal": null,
+    "salah": null,
+    "ronaldo": null,
+    "pele": null
+  },
+  "stadiums": {
+    "sunlit-park": null,
+    "bernabeu": null,
+    "camp-nou": null,
+    "anfield": null,
+    "etihad": null,
+    "maracana": null
+  }
+}
