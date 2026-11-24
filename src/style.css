@@ -2019,18 +2019,45 @@ select:focus {
   .touch-buttons-pad {
     right: 16px;
     bottom: 12px;
-    grid-template-columns: repeat(2, 62px);
+    grid-template-columns: repeat(2, 60px);
     gap: 9px;
   }
 
   .touch-btn {
-    width: 62px;
-    height: 62px;
+    width: 60px;
+    height: 60px;
     padding: 0;
     display: grid;
     place-items: center;
     font-size: 13px;
     letter-spacing: 0.4px;
+    opacity: 0.88;
+  }
+}
+
+.hud-radar-wrap {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(11, 18, 24, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+#hud-radar-canvas {
+  display: block;
+  width: 144px;
+  height: 90px;
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  #hud-radar-canvas {
+    width: 118px;
+    height: 74px;
   }
 }
 

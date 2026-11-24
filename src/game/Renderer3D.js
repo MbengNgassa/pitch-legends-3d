@@ -369,16 +369,20 @@ export class Renderer3D {
       return;
     }
 
-    // Update Ball with smooth interpolation & realistic rolling rotation
+    // Update Ball with smooth interpolation, strict turf floor clamp, and realistic rolling spin
     const b = snapshot.ball;
     const lerpB = Math.min(1, clampedDt * 24);
     this.ballGroup.position.x += (b.x - this.ballGroup.position.x) * lerpB;
-    this.ballGroup.position.y += (b.y - this.ballGroup.position.y) * lerpB;
+    const targetY = Math.max(PITCH.ballRadius, b.y);
+    this.ballGroup.position.y = Math.max(
+      PITCH.ballRadius,
+      this.ballGroup.position.y + (targetY - this.ballGroup.position.y) * lerpB
+    );
     this.ballGroup.position.z += (b.z - this.ballGroup.position.z) * lerpB;
 
     if (this.ballMesh) {
-      this.ballMesh.rotation.z -= b.vx * clampedDt * 1.4;
-      this.ballMesh.rotation.x += b.vz * clampedDt * 1.4;
+      this.ballMesh.rotation.z -= (b.vx * clampedDt) / PITCH.ballRadius;
+      this.ballMesh.rotation.x += (b.vz * clampedDt) / PITCH.ballRadius;
     }
 
     // Ball ground shadow scales slightly with ball altitude

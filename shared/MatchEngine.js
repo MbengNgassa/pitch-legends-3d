@@ -9,8 +9,8 @@ export const PITCH = {
   goalHalfWidth: 5.9,
   goalHeight: 4.8,
   goalDepth: 3.8,
-  ballRadius: 0.72,
-  playerRadius: 1.18,
+  ballRadius: 0.36,
+  playerRadius: 1.05,
 };
 
 export const DIFFICULTIES = {
@@ -872,8 +872,8 @@ export class MatchEngine {
     const owner = this._getPlayer(this.ball.ownerId);
 
     if (owner) {
-      // Smooth magnetic dribble right in front of the player's boots
-      const dribbleDist = 1.68;
+      // Smooth magnetic dribble right at the player's boots
+      const dribbleDist = 1.18;
       const targetX = owner.x + Math.cos(owner.facing) * dribbleDist;
       const targetZ = owner.z + Math.sin(owner.facing) * dribbleDist;
       this.ball.x += (targetX - this.ball.x) * Math.min(1, dt * 22);
@@ -882,15 +882,15 @@ export class MatchEngine {
       this.ball.vx = owner.vx;
       this.ball.vz = owner.vz;
       this.ball.vy = 0;
-      this.ball.spinX = owner.vz * 1.4;
-      this.ball.spinZ = -owner.vx * 1.4;
+      this.ball.spinX = owner.vz * 2.1;
+      this.ball.spinZ = -owner.vx * 2.1;
 
       // Check if an opponent steals cleanly on contact (unless owner is spinning!)
       if (owner.skillTimer <= 0 && !owner.isGK) {
         for (const opp of this.players) {
           if (opp.team === owner.team || opp.kickCooldown > 0 || opp.stunTimer > 0) continue;
           const d = hypot2(this.ball.x - opp.x, this.ball.z - opp.z);
-          const stealRadius = opp.humanSlotId ? 1.85 : 1.45;
+          const stealRadius = opp.humanSlotId ? 1.72 : 1.38;
           if (d < stealRadius) {
             owner.kickCooldown = 0.5;
             owner.stunTimer = 0.35;
@@ -905,21 +905,20 @@ export class MatchEngine {
       return;
     }
 
-    // Free ball physics
+    // Free ball physics — apply gravity BEFORE position update and ALWAYS clamp to turf floor!
+    if (this.ball.y > PITCH.ballRadius || this.ball.vy !== 0) {
+      this.ball.vy -= 21 * dt;
+    }
     this.ball.x += this.ball.vx * dt;
     this.ball.y += this.ball.vy * dt;
     this.ball.z += this.ball.vz * dt;
 
-    // Gravity & ground bounce
-    if (this.ball.y > PITCH.ballRadius || this.ball.vy > 0) {
-      this.ball.vy -= 21 * dt;
-      if (this.ball.y <= PITCH.ballRadius) {
-        this.ball.y = PITCH.ballRadius;
-        if (Math.abs(this.ball.vy) > 1.8) {
-          this.ball.vy = -this.ball.vy * 0.56;
-        } else {
-          this.ball.vy = 0;
-        }
+    if (this.ball.y <= PITCH.ballRadius) {
+      this.ball.y = PITCH.ballRadius;
+      if (this.ball.vy < -1.8) {
+        this.ball.vy = -this.ball.vy * 0.56;
+      } else {
+        this.ball.vy = 0;
       }
     }
 

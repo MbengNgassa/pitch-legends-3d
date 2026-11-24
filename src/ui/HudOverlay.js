@@ -104,6 +104,11 @@ export class HudOverlay {
           </div>
         </div>
 
+        <!-- Live Tactical Pitch Mini-Radar (Bottom Center, EA FC style!) -->
+        <div class="hud-radar-wrap" aria-hidden="true">
+          <canvas id="hud-radar-canvas" width="152" height="96"></canvas>
+        </div>
+
         <!-- Touch Controls Overlay (Auto-shown on phones/tablets) -->
         <div class="touch-controls ${showTouch ? '' : 'hidden'}" id="hud-touch-layer">
           <div class="touch-joystick-zone" id="touch-joystick-zone">
@@ -112,10 +117,10 @@ export class HudOverlay {
             </div>
           </div>
           <div class="touch-buttons-pad">
-            <button class="touch-btn skill" data-action="skill">SPIN</button>
-            <button class="touch-btn sprint" data-action="sprint">SPRINT</button>
-            <button class="touch-btn pass" data-action="pass">PASS</button>
+            <button class="touch-btn skill" data-action="skill">SKILL</button>
             <button class="touch-btn shoot" data-action="shoot">SHOOT</button>
+            <button class="touch-btn pass" data-action="pass">PASS</button>
+            <button class="touch-btn sprint" data-action="sprint">SPRINT</button>
           </div>
         </div>
 
@@ -124,6 +129,8 @@ export class HudOverlay {
       </div>
     `;
 
+    this.radarCanvas = this.root.querySelector('#hud-radar-canvas');
+    this.radarCtx = this.radarCanvas ? this.radarCanvas.getContext('2d') : null;
     this._bindEvents();
   }
 
@@ -283,11 +290,71 @@ export class HudOverlay {
       }
     }
 
+    // Draw live tactical pitch mini-radar
+    this._drawRadar(snapshot, localSlotId);
+
     // Full-time modal (rendered once when match ends)
     if (snapshot.phase === 'fulltime' && !this.fulltimeShown && rewardsData) {
       this.fulltimeShown = true;
       this._renderFulltimeModal(snapshot, rewardsData);
     }
+  }
+
+  _drawRadar(snapshot, localSlotId) {
+    const ctx = this.radarCtx;
+    if (!ctx || !this.radarCanvas) return;
+    const w = this.radarCanvas.width;
+    const h = this.radarCanvas.height;
+    const pad = 6;
+    const pw = w - pad * 2;
+    const ph = h - pad * 2;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Pitch lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.38)';
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(pad, pad, pw, ph);
+    ctx.beginPath();
+    ctx.moveTo(w / 2, pad);
+    ctx.lineTo(w / 2, h - pad);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, 13, 0, Math.PI * 2);
+    ctx.stroke();
+    // Penalty boxes
+    ctx.strokeRect(pad, h / 2 - 20, 18, 40);
+    ctx.strokeRect(w - pad - 18, h / 2 - 20, 18, 40);
+
+    const toX = (x) => pad + ((x + 38) / 76) * pw;
+    const toY = (z) => pad + ((z + 24) / 48) * ph;
+
+    // Players
+    for (const p of snapshot.players) {
+      const px = toX(p.x);
+      const py = toY(p.z);
+      const isControlled = p.humanSlotId === localSlotId;
+      ctx.beginPath();
+      ctx.arc(px, py, isControlled ? 4.4 : 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = p.team === 'home' ? '#38BDF8' : '#F87171';
+      ctx.fill();
+      if (isControlled) {
+        ctx.strokeStyle = '#FACC15';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
+    }
+
+    // Ball dot
+    const bx = toX(snapshot.ball.x);
+    const by = toY(snapshot.ball.z);
+    ctx.beginPath();
+    ctx.arc(bx, by, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    ctx.strokeStyle = '#0B1218';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 
   _renderFulltimeModal(snapshot, rewards) {
