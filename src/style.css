@@ -2775,6 +2775,149 @@ select:focus {
   }
 }
 
+/* ===========================
+   GRAPHICS & BATTERY SAVER SETTINGS
+   =========================== */
+.settings-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.16);
+  border: 1px solid rgba(34, 197, 94, 0.48);
+  color: #dcfce7;
+  font-size: 13px;
+  font-weight: 700;
+}
 
+.settings-chip:hover {
+  background: rgba(34, 197, 94, 0.28);
+}
 
+.match-settings-overlay {
+  pointer-events: auto;
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
 
+.settings-modal-card {
+  max-width: 760px;
+  gap: 12px;
+}
+
+.settings-intro {
+  margin: -4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.gfx-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.gfx-preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 13px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1.5px solid var(--border-subtle);
+  color: var(--text-main);
+}
+
+.gfx-preset-card strong {
+  font-size: 14px;
+}
+
+.gfx-preset-card span {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.gfx-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--gold-bright);
+}
+
+.gfx-preset-card.selected {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: var(--emerald);
+}
+
+.gfx-fine-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.settings-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 6px;
+}
+
+.settings-tip {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .settings-chip {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .settings-modal-card {
+    padding: 13px 16px;
+    gap: 8px;
+    max-height: 94vh;
+    overflow-y: auto;
+  }
+
+  .settings-modal-card .im-head h3 {
+    font-size: 22px;
+  }
+
+  .settings-intro {
+    display: none;
+  }
+
+  .gfx-preset-card {
+    padding: 8px 10px;
+  }
+
+  .gfx-preset-card span {
+    font-size: 10.5px;
+  }
+}
+
+/* Thermal optimization: disable costly live backdrop Gaussian blur over WebGL canvas on Cool & Balanced modes */
+body.perf-cool .scorebug,
+body.perf-cool .player-status-card,
+body.perf-cool .hud-radar-wrap,
+body.perf-cool .touch-btn,
+body.perf-cool .action-card,
+body.perf-cool .wizard-main-col,
+body.perf-cool .wizard-side-col,
+body.perf-cool .setup-panel,
+body.perf-cool .player-card,
+body.perf-cool .install-modal-backdrop,
+body.perf-cool .fulltime-modal,
+body.perf-cool #rotate-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

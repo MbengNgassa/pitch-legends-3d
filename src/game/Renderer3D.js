@@ -6,16 +6,18 @@ import { createSoccerBallTexture } from './TextureFactory.js';
 import { PlayerMesh } from './PlayerMesh.js';
 import { StadiumBuilder } from './StadiumBuilder.js';
 import { modelLoader } from './ModelLoader.js';
+import { isMobileDevice, resolveEffectiveGraphics } from '../state/SettingsStore.js';
 
 /**
  * High-craft Three.js 3D Match & Menu Backdrop Renderer.
- * Features ACES Filmic lighting, soft shadows, dynamic broadcast + goal orbit camera,
- * fiery super-shot trails, confetti & stadium fireworks, and Blender GLB drop-in ball/players/stadiums.
+ * Features thermal-friendly mobile presets (Cool/Battery Saver, Balanced, Ultra),
+ * dynamic shadows, broadcast + goal orbit camera, shared particle pools, and Blender GLB drop-in support.
  */
 export class Renderer3D {
-  constructor(canvasContainer) {
+  constructor(canvasContainer, initialSettings = null) {
     this.container = canvasContainer;
     this.webglReady = false;
+    this.gfx = resolveEffectiveGraphics(initialSettings);
 
     const initW = Math.max(320, this.container.clientWidth || window.innerWidth || 800);
     const initH = Math.max(420, this.container.clientHeight || window.innerHeight || 600);
@@ -23,16 +25,16 @@ export class Renderer3D {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(42, initW / initH, 0.5, 420);
 
-    const isMobile = initW < 820;
+    const mobile = isMobileDevice();
 
     try {
       this.renderer = new THREE.WebGLRenderer({
-        antialias: !isMobile,
-        powerPreference: isMobile ? 'default' : 'high-performance',
+        antialias: !mobile && this.gfx.quality === 'high',
+        powerPreference: mobile ? 'default' : 'high-performance',
       });
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.gfx.pixelRatioCap));
       this.renderer.setSize(initW, initH);
-      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.enabled = Boolean(this.gfx.shadows);
       this.renderer.shadowMap.type = THREE.PCFShadowMap;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.12;
@@ -47,11 +49,18 @@ export class Renderer3D {
     this.mode = 'showcase'; // 'showcase' | 'match'
     this.stadiumBuilder = null;
     this.stadiumData = null;
+    this.sunLight = null;
     this.playerMeshes = new Map();
     this.ballGroup = null;
     this.ballMesh = null;
     this.ballShadow = null;
     this.superHalo = null;
+
+    // Shared reusable particle geometries & material cache (prevents GPU memory & GC heat!)
+    this._burstGeo = new THREE.SphereGeometry(0.14, 5, 5);
+    this._confettiGeo = new THREE.PlaneGeometry(0.38, 0.22);
+    this._fireworkGeo = new THREE.SphereGeometry(0.24, 5, 5);
+    this._particleMatCache = new Map();
 
     this.particles = [];
     this.cameraTarget = new THREE.Vector3(0, 1.5, 0);
@@ -63,11 +72,48 @@ export class Renderer3D {
     this._setupResize();
     if (this.webglReady) {
       try {
-        this.loadShowcase('bernabeu');
+        this.loadShowcase('olembe');
       } catch (err) {
         console.warn('[Renderer3D] Showcase init error:', err);
       }
     }
+  }
+
+  applyGraphicsSettings(settings) {
+    this.gfx = resolveEffectiveGraphics(settings);
+    if (!this.renderer) return;
+
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.gfx.pixelRatioCap));
+    this.renderer.shadowMap.enabled = Boolean(this.gfx.shadows);
+    this.renderer.shadowMap.needsUpdate = true;
+    if (this.sunLight) {
+      this.sunLight.castShadow = Boolean(this.gfx.shadows);
+      if (this.sunLight.shadow && this.sunLight.shadow.mapSize.width !== this.gfx.shadowSize) {
+        this.sunLight.shadow.mapSize.set(this.gfx.shadowSize, this.gfx.shadowSize);
+        if (this.sunLight.shadow.map) {
+          this.sunLight.shadow.map.dispose();
+          this.sunLight.shadow.map = null;
+        }
+      }
+    }
+    if (this.stadiumBuilder) {
+      this.stadiumBuilder.gfx.quality = this.gfx.quality;
+    }
+    this._onResize?.();
+  }
+
+  _getParticleMat(color, doubleSide = false) {
+    const key = `${color}_${doubleSide ? '2' : '1'}`;
+    if (!this._particleMatCache.has(key)) {
+      this._particleMatCache.set(
+        key,
+        new THREE.MeshBasicMaterial({
+          color,
+          side: doubleSide ? THREE.DoubleSide : THREE.FrontSide,
+        })
+      );
+    }
+    return this._particleMatCache.get(key);
   }
 
   _setupResize() {
@@ -94,6 +140,7 @@ export class Renderer3D {
     this.particles = [];
     this.stadiumBuilder = null;
     this.ballGroup = null;
+    this.sunLight = null;
   }
 
   _setupLighting(stadium) {
@@ -105,8 +152,8 @@ export class Renderer3D {
     const sun = new THREE.DirectionalLight(stadium.sunColor, stadium.sunIntensity || 2.3);
     const [sx, sy, sz] = stadium.sunPos || [45, 72, 32];
     sun.position.set(sx, sy, sz);
-    sun.castShadow = true;
-    const shadowRes = (window.innerWidth || 800) < 820 ? 1024 : 2048;
+    sun.castShadow = Boolean(this.gfx.shadows);
+    const shadowRes = this.gfx.shadowSize || 512;
     sun.shadow.mapSize.width = shadowRes;
     sun.shadow.mapSize.height = shadowRes;
     sun.shadow.camera.near = 10;
@@ -117,6 +164,7 @@ export class Renderer3D {
     sun.shadow.camera.top = d;
     sun.shadow.camera.bottom = -d;
     sun.shadow.bias = -0.0005;
+    this.sunLight = sun;
     this.scene.add(sun);
 
     // Subtle rim/fill light for vivid jersey colors
@@ -186,7 +234,7 @@ export class Renderer3D {
     this.stadiumData = stadium;
 
     this._setupLighting(stadium);
-    this.stadiumBuilder = new StadiumBuilder(stadium, homeClub, awayClub);
+    this.stadiumBuilder = new StadiumBuilder(stadium, homeClub, awayClub, this.gfx);
     this.scene.add(this.stadiumBuilder.group);
     this._buildBall();
     this.ballGroup.position.set(0, PITCH.ballRadius, 0);
@@ -206,7 +254,7 @@ export class Renderer3D {
     this.stadiumData = stadium;
 
     this._setupLighting(stadium);
-    this.stadiumBuilder = new StadiumBuilder(stadium, homeClub, awayClub);
+    this.stadiumBuilder = new StadiumBuilder(stadium, homeClub, awayClub, this.gfx);
     this.scene.add(this.stadiumBuilder.group);
     this._buildBall();
 
@@ -264,7 +312,7 @@ export class Renderer3D {
         this.stadiumBuilder?.triggerGoalCelebration(ev.team);
         const gx = ev.team === 'home' ? PITCH.halfLength : -PITCH.halfLength;
         this._spawnConfetti(gx, 4.5, 0, 75);
-        if (this.stadiumData?.fireworksOnGoal) {
+        if (this.stadiumData?.fireworksOnGoal && this.gfx.quality !== 'low') {
           this._spawnFirework(-24, 24, -22, '#FACC15');
           this._spawnFirework(24, 27, -24, '#38BDF8');
           this._spawnFirework(0, 30, -28, '#22C55E');
@@ -274,10 +322,11 @@ export class Renderer3D {
   }
 
   _spawnBurst(x, y, z, color, count = 12, speed = 6) {
-    const geo = new THREE.SphereGeometry(0.14, 6, 6);
-    const mat = new THREE.MeshBasicMaterial({ color });
-    for (let i = 0; i < count; i++) {
-      const m = new THREE.Mesh(geo, mat);
+    const scaled = Math.max(2, Math.round(count * (this.gfx.particlesMul || 0.7)));
+    if (this.particles.length > 140) return;
+    const mat = this._getParticleMat(color, false);
+    for (let i = 0; i < scaled; i++) {
+      const m = new THREE.Mesh(this._burstGeo, mat);
       m.position.set(x, y, z);
       const angle = Math.random() * Math.PI * 2;
       const spd = (0.4 + Math.random() * 0.8) * speed;
@@ -295,14 +344,11 @@ export class Renderer3D {
   }
 
   _spawnConfetti(x, y, z, count = 70) {
+    const scaled = Math.max(16, Math.round(count * (this.gfx.particlesMul || 0.7)));
     const colors = ['#FACC15', '#22C55E', '#38BDF8', '#EF4444', '#FFFFFF', '#FB923C'];
-    const geo = new THREE.PlaneGeometry(0.38, 0.22);
-    for (let i = 0; i < count; i++) {
-      const mat = new THREE.MeshBasicMaterial({
-        color: colors[i % colors.length],
-        side: THREE.DoubleSide,
-      });
-      const m = new THREE.Mesh(geo, mat);
+    for (let i = 0; i < scaled; i++) {
+      const mat = this._getParticleMat(colors[i % colors.length], true);
+      const m = new THREE.Mesh(this._confettiGeo, mat);
       m.position.set(x + (Math.random() - 0.5) * 4, y, z + (Math.random() - 0.5) * 10);
       this.scene.add(m);
       this.particles.push({
@@ -319,10 +365,10 @@ export class Renderer3D {
   }
 
   _spawnFirework(x, y, z, color) {
-    const geo = new THREE.SphereGeometry(0.24, 6, 6);
-    const mat = new THREE.MeshBasicMaterial({ color });
-    for (let i = 0; i < 32; i++) {
-      const m = new THREE.Mesh(geo, mat);
+    const scaled = Math.max(10, Math.round(32 * (this.gfx.particlesMul || 0.7)));
+    const mat = this._getParticleMat(color, false);
+    for (let i = 0; i < scaled; i++) {
+      const m = new THREE.Mesh(this._fireworkGeo, mat);
       m.position.set(x, y, z);
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI;

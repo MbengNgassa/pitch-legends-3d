@@ -14,17 +14,26 @@ import {
   makeShortName,
 } from './state/ProfileStore.js';
 import {
+  loadGraphicsSettings,
+  saveGraphicsSettings,
+  applyPresetToSettings,
+  resolveEffectiveGraphics,
+} from './state/SettingsStore.js';
+import {
   renderHomeScreen,
   renderProfilesScreen,
   renderMatchSetupScreen,
   renderShopScreen,
   renderMultiplayerEntry,
   renderMultiplayerLobby,
+  renderGraphicsSettingsModal,
 } from './ui/Menus.js';
 
 class PitchLegendsApp {
   constructor() {
     this.store = loadHouseholdStore();
+    this.graphicsSettings = loadGraphicsSettings();
+    this.showSettingsModal = false;
     this.screen = 'home'; // 'home' | 'profiles' | 'setup' | 'shop' | 'mp-entry' | 'mp-lobby' | 'match'
     this.setupStep = 1; // 1: Your Team, 2: Opponent, 3: Stadium & Rules
     this.activeRegion = 'house';
@@ -81,6 +90,8 @@ class PitchLegendsApp {
     this.uiRoot = document.getElementById('ui-root');
     this.hudRoot = document.getElementById('hud-root');
 
+    this._applyThermalCss();
+
     this.hud = new HudOverlay(this.hudRoot, {
       onToggleMute: () => {
         const next = !soundEngine.muted;
@@ -88,6 +99,7 @@ class PitchLegendsApp {
         return next;
       },
       onToggleFullscreen: () => this.toggleLandscapeFullscreen(),
+      onOpenSettings: () => this.openSettingsModal(),
       onExitMatch: () => this.exitMatch('home'),
       onRematch: () => this.handleRematch(),
       onOpenShop: () => this.exitMatch('shop'),
@@ -114,13 +126,79 @@ class PitchLegendsApp {
     this.renderUI();
 
     try {
-      this.renderer = new Renderer3D(this.canvasRoot);
+      this.renderer = new Renderer3D(this.canvasRoot, this.graphicsSettings);
     } catch (err) {
       console.warn('[App] Renderer3D init failed:', err);
-      this.renderer = { loadShowcase() {}, loadMatch() {}, handleMatchEvents() {}, render() {} };
+      this.renderer = { loadShowcase() {}, loadMatch() {}, handleMatchEvents() {}, applyGraphicsSettings() {}, render() {} };
     }
 
     this._startLoop();
+  }
+
+  _applyThermalCss() {
+    const eff = resolveEffectiveGraphics(this.graphicsSettings);
+    document.body.classList.toggle('perf-cool', !eff.cssBlur);
+  }
+
+  openSettingsModal() {
+    soundEngine.playClick();
+    this.showSettingsModal = true;
+    this.renderUI();
+  }
+
+  closeSettingsModal() {
+    soundEngine.playClick();
+    this.showSettingsModal = false;
+    this.renderUI();
+  }
+
+  _updateGraphicsSettings(nextSettings) {
+    this.graphicsSettings = nextSettings;
+    saveGraphicsSettings(this.graphicsSettings);
+    this._applyThermalCss();
+    this.renderer?.applyGraphicsSettings?.(this.graphicsSettings);
+    this.renderUI();
+  }
+
+  _bindSettingsModalEvents() {
+    this.uiRoot.querySelector('#settings-modal-close')?.addEventListener('click', () => this.closeSettingsModal());
+    this.uiRoot.querySelector('#settings-done-btn')?.addEventListener('click', () => this.closeSettingsModal());
+    this.uiRoot.querySelector('#settings-modal-backdrop')?.addEventListener('click', (e) => {
+      if (e.target.id === 'settings-modal-backdrop') this.closeSettingsModal();
+    });
+    this.uiRoot.querySelectorAll('[data-pick-quality]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        soundEngine.playClick();
+        this._updateGraphicsSettings(applyPresetToSettings(btn.dataset.pickQuality));
+      });
+    });
+    this.uiRoot.querySelectorAll('[data-pick-fps]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        soundEngine.playClick();
+        this._updateGraphicsSettings({
+          ...this.graphicsSettings,
+          fpsCap: Number(btn.dataset.pickFps) || 45,
+        });
+      });
+    });
+    this.uiRoot.querySelectorAll('[data-pick-res]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        soundEngine.playClick();
+        this._updateGraphicsSettings({
+          ...this.graphicsSettings,
+          pixelRatioCap: Number(btn.dataset.pickRes) || 1.05,
+        });
+      });
+    });
+    this.uiRoot.querySelectorAll('[data-pick-shadows]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        soundEngine.playClick();
+        this._updateGraphicsSettings({
+          ...this.graphicsSettings,
+          shadows: btn.dataset.pickShadows === 'true',
+        });
+      });
+    });
   }
 
   get profile() {
@@ -518,7 +596,12 @@ class PitchLegendsApp {
 
   renderUI() {
     if (this.screen === 'match') {
-      this.uiRoot.innerHTML = '';
+      if (this.showSettingsModal) {
+        this.uiRoot.innerHTML = `<div class="match-settings-overlay">${renderGraphicsSettingsModal(this.graphicsSettings)}</div>`;
+        this._bindSettingsModalEvents();
+      } else {
+        this.uiRoot.innerHTML = '';
+      }
       return;
     }
 
@@ -532,9 +615,17 @@ class PitchLegendsApp {
           canNativeInstall: Boolean(this.deferredInstallPrompt),
           isInstalled: this.isInstalled,
         },
-        this.store.profiles.length
+        this.store.profiles.length,
+        this.graphicsSettings,
+        this.showSettingsModal
       );
       this._bindProfileChip();
+      this.uiRoot.querySelector('#open-settings-btn')?.addEventListener('click', () => {
+        this.openSettingsModal();
+      });
+      if (this.showSettingsModal) {
+        this._bindSettingsModalEvents();
+      }
       this.uiRoot.querySelector('#home-install-btn')?.addEventListener('click', () => {
         soundEngine.playClick();
         this.showInstallModal = true;
@@ -980,26 +1071,45 @@ class PitchLegendsApp {
   }
 
   _startLoop() {
-    let lastTime = performance.now();
+    let lastRenderTime = performance.now();
     const tick = (now) => {
-      const dt = Math.min((now - lastTime) / 1000, 0.05);
-      lastTime = now;
+      requestAnimationFrame(tick);
+
+      // Pause completely when phone screen is off or tab is backgrounded
+      if (document.hidden) {
+        lastRenderTime = now;
+        return;
+      }
+
+      // Cap FPS cleanly so 120Hz phones (e.g. S21 Ultra) never overheat!
+      // Menus run smoothly at 20 FPS; matches run at the user's chosen 30 / 45 / 60 FPS cap.
+      const targetFps = this.screen === 'match' ? this.graphicsSettings?.fpsCap || 45 : 20;
+      const minFrameMs = 1000 / targetFps - 1.2;
+      const elapsedMs = now - lastRenderTime;
+      if (elapsedMs < minFrameMs) {
+        return;
+      }
+
+      const dt = Math.min(elapsedMs / 1000, 0.05);
+      lastRenderTime = now;
 
       if (this.screen === 'match') {
-        const input = this._collectLocalInput();
+        if (!this.showSettingsModal) {
+          const input = this._collectLocalInput();
 
-        if (!this.isMultiplayer && this.soloEngine) {
-          this.soloEngine.setHumanInput('p1', input);
-          this.soloEngine.step(dt);
-          const events = this.soloEngine.consumeEvents();
-          this.latestSnapshot = this.soloEngine.getSnapshot();
-          this._processMatchEvents(events);
-          if (this.latestSnapshot.phase === 'fulltime' && !this.rewardsAwarded) {
-            this._awardMatchCoins(this.latestSnapshot);
+          if (!this.isMultiplayer && this.soloEngine) {
+            this.soloEngine.setHumanInput('p1', input);
+            this.soloEngine.step(dt);
+            const events = this.soloEngine.consumeEvents();
+            this.latestSnapshot = this.soloEngine.getSnapshot();
+            this._processMatchEvents(events);
+            if (this.latestSnapshot.phase === 'fulltime' && !this.rewardsAwarded) {
+              this._awardMatchCoins(this.latestSnapshot);
+            }
+          } else if (this.isMultiplayer && now - this.lastInputSentAt > 30) {
+            this.lastInputSentAt = now;
+            this._sendWs({ type: 'input', input });
           }
-        } else if (this.isMultiplayer && now - this.lastInputSentAt > 30) {
-          this.lastInputSentAt = now;
-          this._sendWs({ type: 'input', input });
         }
 
         this.renderer.render(dt, this.latestSnapshot);
@@ -1007,8 +1117,6 @@ class PitchLegendsApp {
       } else {
         this.renderer.render(dt, null);
       }
-
-      requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   }

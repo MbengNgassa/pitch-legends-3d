@@ -14,15 +14,21 @@ import { modelLoader } from './ModelLoader.js';
  * - Automatic Blender `.glb` stadium drop-in support via ModelLoader
  */
 export class StadiumBuilder {
-  constructor(stadium, homeClub, awayClub) {
+  constructor(stadium, homeClub, awayClub, graphicsConfig = null) {
     this.stadium = stadium;
     this.homeClub = homeClub;
     this.awayClub = awayClub;
+    this.gfx = {
+      quality: graphicsConfig?.quality || 'balanced',
+      crowdScale: graphicsConfig?.crowdScale ?? 0.6,
+      volumetricLights: graphicsConfig?.volumetricLights ?? false,
+    };
 
     this.group = new THREE.Group();
     this.crowdMesh = null;
     this.crowdData = [];
     this.crowdDummy = new THREE.Object3D();
+    this._crowdAccum = 0;
     this.ledTextures = [];
     this.ledMaterials = [];
     this.ledGoalTex = null;
@@ -581,17 +587,18 @@ export class StadiumBuilder {
   }
 
   _buildInstancedCrowd() {
-    const tierCount = this.stadium.id === 'sunlit-park' ? 4 : 7;
+    const tierCount = this.stadium.id === 'sunlit-park' ? 4 : this.gfx.quality === 'low' ? 4 : 7;
+    const stepX = this.gfx.crowdScale < 0.4 ? 3.8 : this.gfx.crowdScale < 0.75 ? 2.65 : 1.85;
     const placements = [];
 
     const addBankSpecs = (length, originX, originZ, rotY, tiers) => {
       const cos = Math.cos(rotY);
       const sin = Math.sin(rotY);
-      const cols = Math.floor(length / 1.85);
+      const cols = Math.floor(length / stepX);
       for (let t = 0; t < tiers; t++) {
         for (let c = 0; c < cols; c++) {
-          if (Math.random() < 0.14) continue; // natural sparse stair gaps
-          const lx = -length / 2 + 1.4 + c * 1.85 + (Math.random() - 0.5) * 0.35;
+          if (Math.random() < 0.16) continue; // natural sparse stair gaps
+          const lx = -length / 2 + 1.4 + c * stepX + (Math.random() - 0.5) * 0.35;
           const ly = 1.9 + t * 1.45;
           const lz = t * 2.2 + (Math.random() - 0.5) * 0.4;
           const wx = originX + lx * cos + lz * sin;
@@ -611,8 +618,8 @@ export class StadiumBuilder {
     addBankSpecs(PITCH.width + 8, PITCH.halfLength + 10.5, 0, Math.PI / 2, tierCount);
     addBankSpecs(PITCH.width + 8, -(PITCH.halfLength + 10.5), 0, -Math.PI / 2, tierCount);
 
-    const specGeo = new THREE.CapsuleGeometry(0.32, 0.55, 4, 6);
-    const specMat = new THREE.MeshStandardMaterial({ roughness: 0.72, metalness: 0.05 });
+    const specGeo = new THREE.CapsuleGeometry(0.32, 0.55, 3, 5);
+    const specMat = new THREE.MeshLambertMaterial({});
     const instanced = new THREE.InstancedMesh(specGeo, specMat, placements.length);
     const color = new THREE.Color();
 
@@ -651,7 +658,7 @@ export class StadiumBuilder {
 
     corners.forEach(([x, z]) => {
       const pylon = new THREE.Group();
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.85, 36, 10), pylonMat);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.85, 36, 8), pylonMat);
       pole.position.set(x, 18, z);
       pylon.add(pole);
 
@@ -660,9 +667,9 @@ export class StadiumBuilder {
       head.lookAt(0, 0, 0);
       pylon.add(head);
 
-      // Soft volumetric light beam cone for dramatic night/twilight stadiums!
-      if (this.stadium.floodlightsOn) {
-        const coneGeo = new THREE.ConeGeometry(16, 48, 16, 1, true);
+      // Soft volumetric light beam cone (Ultra mode only to avoid mobile overdraw heat!)
+      if (this.stadium.floodlightsOn && this.gfx.volumetricLights) {
+        const coneGeo = new THREE.ConeGeometry(16, 48, 12, 1, true);
         coneGeo.translate(0, -24, 0);
         const coneMat = new THREE.MeshBasicMaterial({
           color: this.stadium.sunColor || '#E0F2FE',
@@ -743,20 +750,27 @@ export class StadiumBuilder {
       }
     }
 
-    // Animate instanced crowd (gentle wave normally, ecstatic bouncing when a goal is scored!)
+    // Animate instanced crowd at a mobile-friendly cadence (saves massive CPU/GPU heat!)
     if (this.crowdMesh) {
-      const jumpAmp = this.goalExcitement > 0 ? 0.62 : 0.08;
-      const jumpSpeed = this.goalExcitement > 0 ? 12.0 : 2.8;
-      // Update crowd at smooth cadence
-      for (let i = 0; i < this.crowdData.length; i++) {
-        const d = this.crowdData[i];
-        const hop = Math.abs(Math.sin(elapsed * jumpSpeed + d.phase)) * jumpAmp;
-        this.crowdDummy.position.set(d.x, d.y + hop, d.z);
-        this.crowdDummy.scale.set(1, 1, 1);
-        this.crowdDummy.updateMatrix();
-        this.crowdMesh.setMatrixAt(i, this.crowdDummy.matrix);
+      const shouldAnimate = this.goalExcitement > 0 || this.gfx.quality === 'high';
+      if (shouldAnimate) {
+        this._crowdAccum += dt;
+        const interval = this.goalExcitement > 0 ? 0.06 : 0.11;
+        if (this._crowdAccum >= interval) {
+          this._crowdAccum = 0;
+          const jumpAmp = this.goalExcitement > 0 ? 0.62 : 0.08;
+          const jumpSpeed = this.goalExcitement > 0 ? 12.0 : 2.8;
+          for (let i = 0; i < this.crowdData.length; i++) {
+            const d = this.crowdData[i];
+            const hop = Math.abs(Math.sin(elapsed * jumpSpeed + d.phase)) * jumpAmp;
+            this.crowdDummy.position.set(d.x, d.y + hop, d.z);
+            this.crowdDummy.scale.set(1, 1, 1);
+            this.crowdDummy.updateMatrix();
+            this.crowdMesh.setMatrixAt(i, this.crowdDummy.matrix);
+          }
+          this.crowdMesh.instanceMatrix.needsUpdate = true;
+        }
       }
-      this.crowdMesh.instanceMatrix.needsUpdate = true;
     }
   }
 }

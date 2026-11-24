@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pitch-legends-3d-v11';
+const CACHE_NAME = 'pitch-legends-3d-v12';
 const CORE_ASSETS = [
   './',
   './index.html',

@@ -58,6 +58,7 @@ export class HudOverlay {
           </div>
 
           <div class="hud-actions">
+            <button id="hud-settings-btn" class="hud-icon-btn" title="Graphics &amp; Battery Saver">⚙</button>
             <button id="hud-fs-btn" class="hud-icon-btn" title="Fullscreen Landscape">Full</button>
             <button id="hud-touch-toggle" class="hud-icon-btn" title="Toggle Touch Controls">
               ${showTouch ? 'Touch: ON' : 'Touch'}
@@ -145,6 +146,9 @@ export class HudOverlay {
   }
 
   _bindEvents() {
+    this.root.querySelector('#hud-settings-btn')?.addEventListener('click', () => {
+      this.callbacks.onOpenSettings?.();
+    });
     this.root.querySelector('#hud-fs-btn')?.addEventListener('click', () => {
       this.callbacks.onToggleFullscreen?.();
     });

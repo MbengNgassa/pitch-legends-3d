@@ -15,6 +15,7 @@ import {
   getAvailablePlayersForProfile,
 } from '../state/ProfileStore.js';
 import { renderClubBadgeSVG } from './ClubBadge.js';
+import { QUALITY_PRESETS } from '../state/SettingsStore.js';
 
 function resolveAnyClub(clubId, houseClubs = []) {
   const custom = houseClubs.find((c) => c.id === clubId);
@@ -103,9 +104,98 @@ function renderWorldMapSelector(activeRegion, houseCount = 1) {
   `;
 }
 
-export function renderTopBar(profile, backAction = null, title = '') {
+export function renderGraphicsSettingsModal(settings) {
+  const activeQuality = settings?.quality || 'balanced';
+  const fpsCap = settings?.fpsCap || 45;
+  const shadowsOn = Boolean(settings?.shadows);
+  const resCap = settings?.pixelRatioCap || 1.05;
+
+  const resOptions = [
+    { val: 0.75, label: 'Low (Coolest)' },
+    { val: 1.05, label: 'Standard' },
+    { val: 1.5, label: 'Crisp HD' },
+  ];
+
+  return `
+    <div class="install-modal-backdrop" id="settings-modal-backdrop">
+      <div class="install-modal-card settings-modal-card">
+        <div class="im-head">
+          <h3>Graphics &amp; Battery Saver</h3>
+          <button class="btn-ghost small" id="settings-modal-close">✕</button>
+        </div>
+
+        <p class="settings-intro">
+          Pick a preset to keep your phone cool and smooth — changes apply immediately!
+        </p>
+
+        <div class="gfx-presets-grid">
+          ${Object.values(QUALITY_PRESETS)
+            .map(
+              (p) => `
+            <button class="gfx-preset-card ${activeQuality === p.id ? 'selected' : ''}" data-pick-quality="${p.id}">
+              <strong>${p.label}</strong>
+              <span>${p.tagline}</span>
+              <div class="gfx-meta">${p.fpsCap} FPS · ${p.shadows ? 'Shadows ON' : 'No Shadows'} · ${Math.round(p.pixelRatioCap * 100)}% Res</div>
+            </button>
+          `
+            )
+            .join('')}
+        </div>
+
+        <div class="gfx-fine-grid">
+          <div class="setup-field">
+            <label>Frame Rate Cap (Lower = Cooler Phone)</label>
+            <div class="segmented-group">
+              ${[30, 45, 60]
+                .map(
+                  (fps) => `
+                <button class="seg-btn small ${fpsCap === fps ? 'selected' : ''}" data-pick-fps="${fps}">
+                  ${fps} FPS${fps === 30 ? ' (Cool)' : ''}
+                </button>
+              `
+                )
+                .join('')}
+            </div>
+          </div>
+
+          <div class="setup-field">
+            <label>3D Resolution</label>
+            <div class="segmented-group">
+              ${resOptions
+                .map(
+                  (r) => `
+                <button class="seg-btn small ${Math.abs(resCap - r.val) < 0.16 ? 'selected' : ''}" data-pick-res="${r.val}">
+                  ${r.label}
+                </button>
+              `
+                )
+                .join('')}
+            </div>
+          </div>
+
+          <div class="setup-field">
+            <label>Dynamic Shadows</label>
+            <div class="segmented-group">
+              <button class="seg-btn small ${!shadowsOn ? 'selected' : ''}" data-pick-shadows="false">OFF (Cooler)</button>
+              <button class="seg-btn small ${shadowsOn ? 'selected' : ''}" data-pick-shadows="true">ON</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-footer-row">
+          <span class="settings-tip">Tip: On S21 Ultra or weaker phones, <strong>Cool (30 FPS)</strong> or <strong>Balanced (45 FPS)</strong> stops overheating fast!</span>
+          <button class="btn-primary small" id="settings-done-btn">Done</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+export function renderTopBar(profile, backAction = null, title = '', graphicsSettings = null) {
   const unlockedPlayersCount = profile.unlockedPlayers.length;
   const unlockedStadiumsCount = profile.unlockedStadiums.length;
+  const gfxPreset = QUALITY_PRESETS[graphicsSettings?.quality || 'balanced'] || QUALITY_PRESETS.balanced;
+  const fpsTag = graphicsSettings?.fpsCap || gfxPreset.fpsCap;
 
   return `
     <header class="menu-topbar">
@@ -131,7 +221,10 @@ export function renderTopBar(profile, backAction = null, title = '') {
         </button>
         ${
           !backAction
-            ? `<button class="download-chip" id="home-install-btn" title="Install app to phone home screen or download local version">
+            ? `<button class="settings-chip" id="open-settings-btn" title="Graphics & Battery Saver Settings">
+                ⚙ ${gfxPreset.shortLabel} · ${fpsTag} FPS
+              </button>
+              <button class="download-chip" id="home-install-btn" title="Install app to phone home screen or download local version">
                 Install App
               </button>`
             : ''
@@ -154,7 +247,7 @@ export function renderTopBar(profile, backAction = null, title = '') {
   `;
 }
 
-export function renderHomeScreen(profile, installUi = {}, householdCount = 1) {
+export function renderHomeScreen(profile, installUi = {}, householdCount = 1, graphicsSettings = null, showSettingsModal = false) {
   const customClub = buildCustomClubFromProfile(profile);
   const showInstallModal = Boolean(installUi.showModal);
   const canNativeInstall = Boolean(installUi.canNativeInstall);
@@ -162,7 +255,7 @@ export function renderHomeScreen(profile, installUi = {}, householdCount = 1) {
 
   return `
     <div class="menu-shell home-shell">
-      ${renderTopBar(profile)}
+      ${renderTopBar(profile, null, '', graphicsSettings)}
       <main class="home-hero">
         <div class="hero-copy">
           <h1>Welcome, ${profile.username}!</h1>
@@ -239,6 +332,7 @@ export function renderHomeScreen(profile, installUi = {}, householdCount = 1) {
       `
           : ''
       }
+      ${showSettingsModal ? renderGraphicsSettingsModal(graphicsSettings) : ''}
     </div>
   `;
 }
