@@ -1,14 +1,14 @@
 import { buildEffectiveRoster, getClubById } from './teamsData.js';
 
 export const PITCH = {
-  length: 76,
-  width: 48,
-  halfLength: 38,
-  halfWidth: 24,
-  goalWidth: 11.8,
-  goalHalfWidth: 5.9,
-  goalHeight: 4.8,
-  goalDepth: 3.8,
+  length: 110,
+  width: 68,
+  halfLength: 55,
+  halfWidth: 34,
+  goalWidth: 13.0,
+  goalHalfWidth: 6.5,
+  goalHeight: 5.0,
+  goalDepth: 4.2,
   ballRadius: 0.36,
   playerRadius: 1.05,
 };
@@ -21,7 +21,7 @@ export const DIFFICULTIES = {
     aiShootPower: 0.78,
     aiTackleRange: 1.55,
     gkSpeedMul: 0.74,
-    humanMagnetBonus: 0.42,
+    humanMagnetBonus: 0.48,
     humanAimAssist: 0.58,
     coinBonus: 1.0,
   },
@@ -32,7 +32,7 @@ export const DIFFICULTIES = {
     aiShootPower: 0.92,
     aiTackleRange: 1.85,
     gkSpeedMul: 0.9,
-    humanMagnetBonus: 0.26,
+    humanMagnetBonus: 0.32,
     humanAimAssist: 0.38,
     coinBonus: 1.25,
   },
@@ -43,7 +43,7 @@ export const DIFFICULTIES = {
     aiShootPower: 1.04,
     aiTackleRange: 2.05,
     gkSpeedMul: 1.04,
-    humanMagnetBonus: 0.16,
+    humanMagnetBonus: 0.2,
     humanAimAssist: 0.22,
     coinBonus: 1.5,
   },
@@ -51,13 +51,13 @@ export const DIFFICULTIES = {
 
 export const HUMAN_COLORS = ['#38BDF8', '#22C55E', '#FB923C'];
 
-// 5-a-side base formations (home attacks +X, away mirrors to attack -X)
+// 5-a-side base formations spread nicely across the 110x68 pitch (home attacks +X)
 const HOME_FORMATION = [
-  { x: -35.2, z: 0 },      // 0: GK
-  { x: -18.5, z: -6.5 },   // 1: DEF
-  { x: -12.0, z: 7.5 },    // 2: MID
-  { x: -5.5, z: -7.5 },    // 3: FWD left
-  { x: -4.2, z: 2.5 },     // 4: FWD striker
+  { x: -51.5, z: 0 },      // 0: GK
+  { x: -27.5, z: -9.5 },   // 1: DEF
+  { x: -16.5, z: 11.0 },   // 2: MID
+  { x: -7.5, z: -13.5 },   // 3: FWD winger
+  { x: -4.5, z: 4.5 },     // 4: FWD striker
 ];
 
 function clamp(v, min, max) {
@@ -151,6 +151,8 @@ export class MatchEngine {
       ownerId: null,
       lastTouchId: null,
       lastTouchTeam: null,
+      passTargetId: null,
+      passAssistTimer: 0,
       isSuper: false,
       spinX: 0,
       spinZ: 0,
@@ -170,7 +172,7 @@ export class MatchEngine {
         const homePos = HOME_FORMATION[idx];
         const baseX = homePos.x * dir;
         const baseZ = homePos.z * dir;
-        const speedBase = 8.4 + ((data.pac - 50) / 50) * 4.4;
+        const speedBase = 9.8 + ((data.pac - 50) / 50) * 5.2;
         this.players.push({
           id: `${team}_${idx}`,
           team,
@@ -408,7 +410,7 @@ export class MatchEngine {
 
     const hasBall = this.ball.ownerId === p.id;
 
-    // Movement vector
+    // Movement vector + helpful automatic ball-magnet assist when off the ball!
     const mag = Math.hypot(inp.mx, inp.mz);
     let moveX = 0;
     let moveZ = 0;
@@ -416,16 +418,87 @@ export class MatchEngine {
       const clampedMag = Math.min(1, mag);
       moveX = (inp.mx / mag) * clampedMag;
       moveZ = (inp.mz / mag) * clampedMag;
+    }
+
+    if (!hasBall) {
+      const isPassToMe = !this.ball.ownerId && this.ball.passTargetId === p.id && this.ball.passAssistTimer > 0;
+      const isFreeBall = !this.ball.ownerId;
+      const leadT = isFreeBall ? 0.18 : 0.08;
+      const ix = clamp(this.ball.x + this.ball.vx * leadT, -PITCH.halfLength + 1, PITCH.halfLength - 1);
+      const iz = clamp(this.ball.z + this.ball.vz * leadT, -PITCH.halfWidth + 1, PITCH.halfWidth - 1);
+      const toBallX = ix - p.x;
+      const toBallZ = iz - p.z;
+      const distToBall = Math.hypot(toBallX, toBallZ);
+
+      if (distToBall > 0.45) {
+        const bDir = { x: toBallX / distToBall, z: toBallZ / distToBall };
+
+        if (isPassToMe && distToBall < 32) {
+          // Run smoothly onto an incoming pass!
+          if (mag < 0.14) {
+            moveX = bDir.x * 0.95;
+            moveZ = bDir.z * 0.95;
+          } else {
+            const dot = moveX * bDir.x + moveZ * bDir.z;
+            if (dot > -0.2) {
+              moveX = moveX * 0.48 + bDir.x * 0.52;
+              moveZ = moveZ * 0.48 + bDir.z * 0.52;
+            }
+          }
+        } else if (isFreeBall && distToBall < 15) {
+          // Helpful assist toward nearby loose balls!
+          if (mag < 0.14) {
+            moveX = bDir.x * 0.85;
+            moveZ = bDir.z * 0.85;
+          } else {
+            const dot = moveX * bDir.x + moveZ * bDir.z;
+            if (dot > 0.1) {
+              moveX = moveX * 0.65 + bDir.x * 0.35;
+              moveZ = moveZ * 0.65 + bDir.z * 0.35;
+            }
+          }
+        } else if (!isFreeBall && distToBall < 7.5 && mag > 0.14) {
+          // Gentle close-defending magnetic assist toward the opponent with the ball
+          const owner = this._getPlayer(this.ball.ownerId);
+          if (owner && owner.team !== p.team) {
+            const dot = moveX * bDir.x + moveZ * bDir.z;
+            if (dot > 0.25) {
+              moveX = moveX * 0.72 + bDir.x * 0.28;
+              moveZ = moveZ * 0.72 + bDir.z * 0.28;
+            }
+          }
+        }
+      }
+
+      // Smart auto-switch when another unassigned teammate is MUCH closer to a loose/defended ball
+      if (!isPassToMe && distToBall > 14) {
+        const best = this._findBestSwitchCandidate(human);
+        if (best && best.id !== p.id) {
+          const bestDist = hypot2(best.x - this.ball.x, best.z - this.ball.z);
+          if (bestDist < distToBall - 8 && bestDist < 13) {
+            this._switchHumanToPlayer(human, best);
+            return;
+          }
+        }
+      }
+    }
+
+    const finalMag = Math.hypot(moveX, moveZ);
+    if (finalMag > 1) {
+      moveX /= finalMag;
+      moveZ /= finalMag;
+    }
+    if (finalMag > 0.08) {
       const desiredAngle = Math.atan2(moveZ, moveX);
       p.facing = lerpAngle(p.facing, desiredAngle, Math.min(1, dt * 15));
     }
 
     // Sprint stamina
-    const sprinting = inp.sprint && mag > 0.1 && p.stamina > 0.06;
+    const sprinting = inp.sprint && finalMag > 0.1 && p.stamina > 0.06;
     if (sprinting) {
-      p.stamina = Math.max(0, p.stamina - dt * 0.34);
+      p.stamina = Math.max(0, p.stamina - dt * 0.32);
     } else {
-      p.stamina = Math.min(1, p.stamina + dt * 0.28);
+      p.stamina = Math.min(1, p.stamina + dt * 0.3);
     }
 
     let speed = p.speedBase * (sprinting ? 1.32 : 1.0);
@@ -437,7 +510,7 @@ export class MatchEngine {
     p.vz = moveZ * speed;
 
     // Build Super Meter gradually while dribbling!
-    if (hasBall && mag > 0.2) {
+    if (hasBall && finalMag > 0.2) {
       p.superMeter = Math.min(100, p.superMeter + dt * 11);
     }
 
@@ -470,7 +543,7 @@ export class MatchEngine {
       // Without ball: Pass/Switch switches player OR tackles if close!
       if (passJustPressed) {
         const distToBall = hypot2(this.ball.x - p.x, this.ball.z - p.z);
-        if (distToBall < 3.4) {
+        if (distToBall < 3.6) {
           this._performTackle(p);
         } else {
           // Switch to nearest unassigned outfield teammate to the ball
@@ -508,11 +581,12 @@ export class MatchEngine {
   }
 
   _performPass(passer, human, aimX, aimZ) {
+    const attackDir = passer.team === 'home' ? 1 : -1;
     const dir = Math.hypot(aimX, aimZ) > 0.15
       ? normalize2(aimX, aimZ)
       : { x: Math.cos(passer.facing), z: Math.sin(passer.facing) };
 
-    // Find best teammate in the aimed cone (prioritize human teammates or open attackers!)
+    // Find best teammate in aimed cone — favoring forward runs & human teammates!
     let bestTarget = null;
     let bestScore = -Infinity;
     for (const mate of this.players) {
@@ -522,8 +596,9 @@ export class MatchEngine {
       const dist = Math.hypot(dx, dz);
       if (dist < 2.2) continue;
       const dot = (dx / dist) * dir.x + (dz / dist) * dir.z;
-      const humanBonus = mate.humanSlotId ? 0.35 : 0;
-      const score = dot * 2.2 - dist * 0.025 + humanBonus;
+      const forwardBonus = (dx * attackDir) > 2 ? 0.35 : 0;
+      const humanBonus = mate.humanSlotId ? 0.4 : 0;
+      const score = dot * 2.5 - dist * 0.014 + forwardBonus + humanBonus;
       if (score > bestScore) {
         bestScore = score;
         bestTarget = mate;
@@ -531,16 +606,33 @@ export class MatchEngine {
     }
 
     let passDir = dir;
-    let speed = 22 + (passer.data.pas / 100) * 6;
-    if (bestTarget && bestScore > -0.25) {
-      // Lead pass slightly ahead of moving receiver
-      const leadX = bestTarget.x + bestTarget.vx * 0.22;
-      const leadZ = bestTarget.z + bestTarget.vz * 0.22;
+    let speed = 28 + (passer.data.pas / 100) * 8;
+    let chosenTargetId = null;
+
+    if (bestTarget && bestScore > -0.35) {
+      const rawDist = hypot2(bestTarget.x - passer.x, bestTarget.z - passer.z);
+      const estFlight = clamp(rawDist / 32, 0.18, 0.72);
+      // Lead pass cleanly into the receiver's running stride (extra through-ball lead if attacking!)
+      const attackingRun = (bestTarget.x - passer.x) * attackDir > 3;
+      const throughLead = attackingRun ? attackDir * clamp(rawDist * 0.12, 1.5, 4.5) : 0;
+      const leadX = clamp(
+        bestTarget.x + bestTarget.vx * estFlight * 0.68 + throughLead,
+        -PITCH.halfLength + 3,
+        PITCH.halfLength - 3
+      );
+      const leadZ = clamp(
+        bestTarget.z + bestTarget.vz * estFlight * 0.62,
+        -PITCH.halfWidth + 3,
+        PITCH.halfWidth - 3
+      );
+
       const dx = leadX - passer.x;
       const dz = leadZ - passer.z;
       const dist = Math.hypot(dx, dz);
       passDir = normalize2(dx, dz);
-      speed = clamp(15 + dist * 0.72, 17, 29);
+      // Crisp drag-compensated speed so passes ALWAYS reach the teammate with zip!
+      speed = clamp(23 + dist * 0.68 + (passer.data.pas / 100) * 6, 24, 44);
+      chosenTargetId = bestTarget.id;
 
       // If passer was human and receiver is AI, seamlessly switch control to the receiver!
       if (human && !bestTarget.humanSlotId) {
@@ -551,10 +643,12 @@ export class MatchEngine {
     this.ball.ownerId = null;
     this.ball.lastTouchId = passer.id;
     this.ball.lastTouchTeam = passer.team;
+    this.ball.passTargetId = chosenTargetId;
+    this.ball.passAssistTimer = chosenTargetId ? 1.45 : 0;
     this.ball.isSuper = false;
     this.ball.vx = passDir.x * speed;
     this.ball.vz = passDir.z * speed;
-    this.ball.vy = 1.4;
+    this.ball.vy = speed > 34 ? 2.4 : 1.2;
     passer.kickCooldown = 0.26;
     passer.superMeter = Math.min(100, passer.superMeter + 18);
 
@@ -766,15 +860,20 @@ export class MatchEngine {
       return;
     }
 
-    // Determine if this AI is the closest AI on its team to chase the ball
-    const isChaser = !teamHasBall && this._isClosestAIBallChaser(p);
+    // Determine if this AI is the intended receiver of an active pass or closest ball chaser
+    const isPassReceiver = !this.ball.ownerId && this.ball.passTargetId === p.id && this.ball.passAssistTimer > 0;
+    const isChaser = !isPassReceiver && !teamHasBall && this._isClosestAIBallChaser(p);
 
     let targetX = p.baseX;
     let targetZ = p.baseZ;
 
-    if (isChaser) {
-      targetX = this.ball.x + this.ball.vx * 0.12;
-      targetZ = this.ball.z + this.ball.vz * 0.12;
+    if (isPassReceiver) {
+      // Sprint directly to meet the incoming pass cleanly!
+      targetX = clamp(this.ball.x + this.ball.vx * 0.2, -PITCH.halfLength + 2, PITCH.halfLength - 2);
+      targetZ = clamp(this.ball.z + this.ball.vz * 0.2, -PITCH.halfWidth + 2, PITCH.halfWidth - 2);
+    } else if (isChaser) {
+      targetX = this.ball.x + this.ball.vx * 0.14;
+      targetZ = this.ball.z + this.ball.vz * 0.14;
 
       // Attempt tackle if opponent has ball within range
       if (owner && owner.team !== p.team) {
@@ -784,15 +883,48 @@ export class MatchEngine {
         }
       }
     } else if (teamHasBall) {
-      // Make fun supporting attacking runs!
-      const shiftX = clamp(this.ball.x * 0.55 + attackDir * 11, -PITCH.halfLength + 6, PITCH.halfLength - 5);
-      targetX = p.baseX * 0.35 + shiftX * 0.65;
-      targetZ = clamp(p.baseZ + Math.sin(this.timeRemaining * 0.8 + p.slotIndex * 2) * 3.5, -PITCH.halfWidth + 4, PITCH.halfWidth - 4);
+      // Intelligent attacking runs! Teammates push ahead into open passing lanes as you attack goal
+      const carrierZ = owner ? owner.z : this.ball.z;
+      const carrierX = owner ? owner.x : this.ball.x;
+      const oppGoalX = attackDir * (PITCH.halfLength - 8);
+
+      if (p.slotIndex === 4) {
+        // Striker spearheads forward into space ahead of the ball carrier!
+        targetX = clamp(carrierX + attackDir * 22, -PITCH.halfLength + 12, oppGoalX);
+        targetZ = clamp(-Math.sign(carrierZ || 1) * 11, -PITCH.halfWidth + 7, PITCH.halfWidth - 7);
+      } else if (p.slotIndex === 3) {
+        // Winger makes a wide overlapping sprint down the opposite flank!
+        targetX = clamp(carrierX + attackDir * 17, -PITCH.halfLength + 10, oppGoalX + 2);
+        const wingSide = carrierZ >= 0 ? -1 : 1;
+        targetZ = clamp(wingSide * 20, -PITCH.halfWidth + 5, PITCH.halfWidth - 5);
+      } else if (p.slotIndex === 2) {
+        // Midfielder offers a smart diagonal forward-support triangle
+        targetX = clamp(carrierX + attackDir * 9, -PITCH.halfLength + 10, oppGoalX - 6);
+        targetZ = clamp((carrierZ >= 0 ? -1 : 1) * 10 + Math.sin(this.timeRemaining * 0.7) * 4, -PITCH.halfWidth + 6, PITCH.halfWidth - 6);
+      } else {
+        // Defender holds smart midfield support ready for back-pass or counter-defense
+        targetX = clamp(carrierX - attackDir * 14, -PITCH.halfLength + 14, PITCH.halfLength - 22);
+        targetZ = clamp(carrierZ * 0.4, -PITCH.halfWidth + 8, PITCH.halfWidth - 8);
+      }
+
+      // Actively drift away from nearby defenders to get open for passes!
+      for (const opp of this.players) {
+        if (opp.team === p.team || opp.isGK) continue;
+        const odx = targetX - opp.x;
+        const odz = targetZ - opp.z;
+        const od = Math.hypot(odx, odz);
+        if (od < 7.5 && od > 0.1) {
+          targetX += (odx / od) * 4.5;
+          targetZ += (odz / od) * 6.0;
+        }
+      }
+      targetX = clamp(targetX, -PITCH.halfLength + 5, PITCH.halfLength - 5);
+      targetZ = clamp(targetZ, -PITCH.halfWidth + 4, PITCH.halfWidth - 4);
     } else {
-      // Defensive zonal shape
-      const shiftX = clamp(this.ball.x * 0.6 - attackDir * 7, -PITCH.halfLength + 7, PITCH.halfLength - 7);
-      targetX = p.baseX * 0.45 + shiftX * 0.55;
-      targetZ = clamp(p.baseZ * 0.6 + this.ball.z * 0.35, -PITCH.halfWidth + 4, PITCH.halfWidth - 4);
+      // Compact defensive zonal shape
+      const shiftX = clamp(this.ball.x * 0.62 - attackDir * 10, -PITCH.halfLength + 9, PITCH.halfLength - 9);
+      targetX = p.baseX * 0.42 + shiftX * 0.58;
+      targetZ = clamp(p.baseZ * 0.55 + this.ball.z * 0.4, -PITCH.halfWidth + 5, PITCH.halfWidth - 5);
     }
 
     const dx = targetX - p.x;
@@ -800,9 +932,9 @@ export class MatchEngine {
     const dist = Math.hypot(dx, dz);
     if (dist > 0.6) {
       const n = normalize2(dx, dz);
-      const speedMul = isChaser ? 0.96 : 0.82;
-      p.vx = n.x * Math.min(aiSpeed * speedMul, dist * 4);
-      p.vz = n.z * Math.min(aiSpeed * speedMul, dist * 4);
+      const speedMul = isPassReceiver ? 1.12 : isChaser ? 0.98 : teamHasBall ? 0.96 : 0.84;
+      p.vx = n.x * Math.min(aiSpeed * speedMul, dist * 4.5);
+      p.vz = n.z * Math.min(aiSpeed * speedMul, dist * 4.5);
       p.facing = lerpAngle(p.facing, Math.atan2(n.z, n.x), Math.min(1, dt * 10));
     } else {
       p.vx *= 0.8;
@@ -922,8 +1054,14 @@ export class MatchEngine {
       }
     }
 
-    // Grass / air friction
-    const drag = this.ball.y <= PITCH.ballRadius + 0.05 ? Math.pow(0.28, dt) : Math.pow(0.75, dt);
+    // Tick pass assist lock timer
+    if (this.ball.passAssistTimer > 0) {
+      this.ball.passAssistTimer = Math.max(0, this.ball.passAssistTimer - dt);
+      if (this.ball.passAssistTimer === 0) this.ball.passTargetId = null;
+    }
+
+    // Grass / air friction (smooth pro turf so passes glide crisply without dying short!)
+    const drag = this.ball.y <= PITCH.ballRadius + 0.05 ? Math.pow(0.48, dt) : Math.pow(0.78, dt);
     this.ball.vx *= drag;
     this.ball.vz *= drag;
     this.ball.spinX = this.ball.vz * 1.5;

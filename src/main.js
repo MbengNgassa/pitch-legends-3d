@@ -55,6 +55,24 @@ class PitchLegendsApp {
     this.setupStep = 1; // 1: Your Club, 2: Opponent, 3: Stadium & Rules
     this.shopTab = 'players';
     this.previewStadiumId = 'bernabeu';
+    this.deferredInstallPrompt = null;
+    this.showInstallModal = false;
+    this.isInstalled =
+      window.matchMedia?.('(display-mode: fullscreen)').matches ||
+      window.matchMedia?.('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this.deferredInstallPrompt = e;
+      if (this.screen === 'home') this.renderUI();
+    });
+    window.addEventListener('appinstalled', () => {
+      this.deferredInstallPrompt = null;
+      this.isInstalled = true;
+      this.showInstallModal = false;
+      if (this.screen === 'home') this.renderUI();
+    });
 
     this.setup = {
       homeClubId: 'real-madrid',
@@ -466,7 +484,39 @@ class PitchLegendsApp {
     }
 
     if (this.screen === 'home') {
-      this.uiRoot.innerHTML = renderHomeScreen(this.profile);
+      this.uiRoot.innerHTML = renderHomeScreen(this.profile, {
+        showModal: this.showInstallModal,
+        canNativeInstall: Boolean(this.deferredInstallPrompt),
+        isInstalled: this.isInstalled,
+      });
+      this.uiRoot.querySelector('#home-install-btn')?.addEventListener('click', () => {
+        soundEngine.playClick();
+        this.showInstallModal = true;
+        this.renderUI();
+      });
+      this.uiRoot.querySelector('#install-modal-close')?.addEventListener('click', () => {
+        soundEngine.playClick();
+        this.showInstallModal = false;
+        this.renderUI();
+      });
+      this.uiRoot.querySelector('#install-modal-backdrop')?.addEventListener('click', (e) => {
+        if (e.target.id === 'install-modal-backdrop') {
+          this.showInstallModal = false;
+          this.renderUI();
+        }
+      });
+      this.uiRoot.querySelector('#install-native-trigger')?.addEventListener('click', async () => {
+        if (!this.deferredInstallPrompt) return;
+        this.deferredInstallPrompt.prompt();
+        try {
+          await this.deferredInstallPrompt.userChoice;
+        } catch {
+          // Ignore prompt cancel
+        }
+        this.deferredInstallPrompt = null;
+        this.showInstallModal = false;
+        this.renderUI();
+      });
       this.uiRoot.querySelector('#home-play-solo')?.addEventListener('click', () => {
         soundEngine.unlock();
         soundEngine.playClick();

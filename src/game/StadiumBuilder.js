@@ -131,7 +131,7 @@ export class StadiumBuilder {
       roughness: 0.92,
       metalness: 0.0,
     });
-    const apron = new THREE.Mesh(new THREE.PlaneGeometry(170, 130), apronMat);
+    const apron = new THREE.Mesh(new THREE.PlaneGeometry(240, 180), apronMat);
     apron.rotation.x = -Math.PI / 2;
     apron.position.y = -0.05;
     apron.receiveShadow = true;
@@ -145,7 +145,7 @@ export class StadiumBuilder {
       metalness: 0.02,
     });
     // Slightly larger than exact lines so the inner chalk borders match PITCH.length x PITCH.width
-    const pitchGeo = new THREE.PlaneGeometry(PITCH.length + 6.0, PITCH.width + 5.2);
+    const pitchGeo = new THREE.PlaneGeometry(PITCH.length + 8.6, PITCH.width + 7.2);
     const pitchMesh = new THREE.Mesh(pitchGeo, pitchMat);
     pitchMesh.rotation.x = -Math.PI / 2;
     pitchMesh.position.y = 0;
@@ -379,13 +379,15 @@ export class StadiumBuilder {
     };
 
     const tierCount = this.stadium.id === 'sunlit-park' ? 4 : 7;
+    const longStand = PITCH.length + 14;
+    const endStand = PITCH.width + 12;
     // Far North stand (main broadcast backdrop — always fully visible!)
-    buildStandBank(88, 0, -(PITCH.halfWidth + 8.5), Math.PI, tierCount);
+    buildStandBank(longStand, 0, -(PITCH.halfWidth + 8.5), Math.PI, tierCount);
     // East & West behind-goal stands
-    buildStandBank(58, PITCH.halfLength + 10.5, 0, Math.PI / 2, tierCount);
-    buildStandBank(58, -(PITCH.halfLength + 10.5), 0, -Math.PI / 2, tierCount);
+    buildStandBank(endStand, PITCH.halfLength + 10.5, 0, Math.PI / 2, tierCount);
+    buildStandBank(endStand, -(PITCH.halfLength + 10.5), 0, -Math.PI / 2, tierCount);
     // Low South stand behind camera so reflections/orbit shots look complete!
-    buildStandBank(88, 0, PITCH.halfWidth + 10.5, 0, 3);
+    buildStandBank(longStand, 0, PITCH.halfWidth + 10.5, 0, 3);
   }
 
   _buildInstancedCrowd() {
@@ -395,11 +397,11 @@ export class StadiumBuilder {
     const addBankSpecs = (length, originX, originZ, rotY, tiers) => {
       const cos = Math.cos(rotY);
       const sin = Math.sin(rotY);
-      const cols = Math.floor(length / 1.55);
+      const cols = Math.floor(length / 1.85);
       for (let t = 0; t < tiers; t++) {
         for (let c = 0; c < cols; c++) {
           if (Math.random() < 0.14) continue; // natural sparse stair gaps
-          const lx = -length / 2 + 1.4 + c * 1.55 + (Math.random() - 0.5) * 0.35;
+          const lx = -length / 2 + 1.4 + c * 1.85 + (Math.random() - 0.5) * 0.35;
           const ly = 1.9 + t * 1.45;
           const lz = t * 2.2 + (Math.random() - 0.5) * 0.4;
           const wx = originX + lx * cos + lz * sin;
@@ -415,9 +417,9 @@ export class StadiumBuilder {
       }
     };
 
-    addBankSpecs(84, 0, -(PITCH.halfWidth + 8.5), Math.PI, tierCount);
-    addBankSpecs(54, PITCH.halfLength + 10.5, 0, Math.PI / 2, tierCount);
-    addBankSpecs(54, -(PITCH.halfLength + 10.5), 0, -Math.PI / 2, tierCount);
+    addBankSpecs(PITCH.length + 10, 0, -(PITCH.halfWidth + 8.5), Math.PI, tierCount);
+    addBankSpecs(PITCH.width + 8, PITCH.halfLength + 10.5, 0, Math.PI / 2, tierCount);
+    addBankSpecs(PITCH.width + 8, -(PITCH.halfLength + 10.5), 0, -Math.PI / 2, tierCount);
 
     const specGeo = new THREE.CapsuleGeometry(0.32, 0.55, 4, 6);
     const specMat = new THREE.MeshStandardMaterial({ roughness: 0.72, metalness: 0.05 });

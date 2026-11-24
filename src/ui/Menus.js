@@ -26,9 +26,9 @@ export function renderTopBar(profile, backAction = null, title = '') {
       <div class="topbar-stats">
         ${
           !backAction
-            ? `<a class="download-chip" href="./pitch-legends-3d-offline.html" download="Pitch-Legends-3D.html" title="Download single offline game file">
-                ⬇ Save Offline
-              </a>`
+            ? `<button class="download-chip" id="home-install-btn" title="Install app to phone home screen or download local version">
+                Install App
+              </button>`
             : ''
         }
         <div class="stat-chip" title="Unlocked Superstars">
@@ -49,8 +49,12 @@ export function renderTopBar(profile, backAction = null, title = '') {
   `;
 }
 
-export function renderHomeScreen(profile) {
+export function renderHomeScreen(profile, installUi = {}) {
   const activeDraftCount = profile.activeDraft.length;
+  const showInstallModal = Boolean(installUi.showModal);
+  const canNativeInstall = Boolean(installUi.canNativeInstall);
+  const isInstalled = Boolean(installUi.isInstalled);
+
   return `
     <div class="menu-shell home-shell">
       ${renderTopBar(profile)}
@@ -85,6 +89,50 @@ export function renderHomeScreen(profile) {
           </button>
         </div>
       </main>
+
+      ${
+        showInstallModal
+          ? `
+        <div class="install-modal-backdrop" id="install-modal-backdrop">
+          <div class="install-modal-card">
+            <div class="im-head">
+              <h3>Install &amp; Local Download</h3>
+              <button class="btn-ghost small" id="install-modal-close">✕</button>
+            </div>
+            <div class="im-grid">
+              <div class="im-option primary-opt">
+                <strong>Phone Home Screen App (Offline)</strong>
+                <p>Installs Pitch Legends 3D with its own app icon, fullscreen landscape mode, and offline play.</p>
+                ${
+                  isInstalled
+                    ? `<span class="unlocked-tag">Already Installed on Home Screen ✓</span>`
+                    : canNativeInstall
+                      ? `<button class="btn-primary full-btn" id="install-native-trigger">Install to Home Screen</button>`
+                      : `<div class="im-steps">
+                          <strong>Chrome Android:</strong> Tap <code>⋮</code> (top right) → <strong>Install app</strong> / <strong>Add to Home screen</strong>.<br/>
+                          <strong>iPhone Safari:</strong> Tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.
+                        </div>`
+                }
+              </div>
+
+              <div class="im-option">
+                <strong>Local Computer / 3-Device Wi-Fi Package</strong>
+                <p>Download the full app folder (with 3-device Wi-Fi server &amp; Blender model folder) or standalone file.</p>
+                <div class="im-links">
+                  <a class="btn-gold small im-link-btn" href="https://github.com/MbengNgassa/pitch-legends-3d/archive/refs/heads/main.zip" target="_blank" rel="noopener">
+                    Download Full App (.zip)
+                  </a>
+                  <a class="btn-secondary small im-link-btn" href="./pitch-legends-3d-offline.html" download="Pitch-Legends-3D.html">
+                    Single Offline File (.html)
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `
+          : ''
+      }
     </div>
   `;
 }

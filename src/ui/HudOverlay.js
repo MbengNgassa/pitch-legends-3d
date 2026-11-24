@@ -1,4 +1,5 @@
 import { getClubById } from '../../shared/teamsData.js';
+import { PITCH } from '../../shared/MatchEngine.js';
 import { renderClubBadgeSVG } from './ClubBadge.js';
 
 function formatClock(seconds) {
@@ -326,8 +327,8 @@ export class HudOverlay {
     ctx.strokeRect(pad, h / 2 - 20, 18, 40);
     ctx.strokeRect(w - pad - 18, h / 2 - 20, 18, 40);
 
-    const toX = (x) => pad + ((x + 38) / 76) * pw;
-    const toY = (z) => pad + ((z + 24) / 48) * ph;
+    const toX = (x) => pad + ((x + PITCH.halfLength) / PITCH.length) * pw;
+    const toY = (z) => pad + ((z + PITCH.halfWidth) / PITCH.width) * ph;
 
     // Players
     for (const p of snapshot.players) {

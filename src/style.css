@@ -2065,8 +2065,105 @@ select:focus {
   .home-cards,
   .wizard-body,
   .lobby-grid,
-  .mp-split {
+  .mp-split,
+  .im-grid {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===========================
+   INSTALL & LOCAL DOWNLOAD MODAL
+   =========================== */
+.install-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(7, 12, 18, 0.78);
+  backdrop-filter: blur(8px);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.install-modal-card {
+  width: 100%;
+  max-width: 720px;
+  background: #0f1924;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.im-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.im-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.im-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.im-option {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.im-option.primary-opt {
+  background: rgba(22, 163, 74, 0.14);
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.im-option strong {
+  font-size: 15px;
+}
+
+.im-option p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.im-steps {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #e2e8f0;
+}
+
+.im-links {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.im-link-btn {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
 
