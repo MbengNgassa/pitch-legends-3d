@@ -5,12 +5,12 @@ export const PITCH = {
   width: 48,
   halfLength: 38,
   halfWidth: 24,
-  goalWidth: 11.2,
-  goalHalfWidth: 5.6,
-  goalHeight: 4.5,
+  goalWidth: 11.8,
+  goalHalfWidth: 5.9,
+  goalHeight: 4.8,
   goalDepth: 3.8,
-  ballRadius: 0.52,
-  playerRadius: 0.92,
+  ballRadius: 0.72,
+  playerRadius: 1.18,
 };
 
 export const DIFFICULTIES = {
@@ -873,7 +873,7 @@ export class MatchEngine {
 
     if (owner) {
       // Smooth magnetic dribble right in front of the player's boots
-      const dribbleDist = 1.25;
+      const dribbleDist = 1.68;
       const targetX = owner.x + Math.cos(owner.facing) * dribbleDist;
       const targetZ = owner.z + Math.sin(owner.facing) * dribbleDist;
       this.ball.x += (targetX - this.ball.x) * Math.min(1, dt * 22);
@@ -890,7 +890,7 @@ export class MatchEngine {
         for (const opp of this.players) {
           if (opp.team === owner.team || opp.kickCooldown > 0 || opp.stunTimer > 0) continue;
           const d = hypot2(this.ball.x - opp.x, this.ball.z - opp.z);
-          const stealRadius = opp.humanSlotId ? 1.55 : 1.18;
+          const stealRadius = opp.humanSlotId ? 1.85 : 1.45;
           if (d < stealRadius) {
             owner.kickCooldown = 0.5;
             owner.stunTimer = 0.35;

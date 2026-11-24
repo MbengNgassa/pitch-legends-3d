@@ -8,6 +8,12 @@
       name="description"
       content="Kid-friendly 3D football game with real clubs, real players and stats, unlockable superstars and stadiums, Blender GLB support, and 3-device local Wi-Fi multiplayer."
     />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <meta name="theme-color" content="#16a34a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -20,7 +26,29 @@
       <div id="canvas-root" aria-label="3D Football Pitch"></div>
       <div id="ui-root"></div>
       <div id="hud-root"></div>
+      <div id="rotate-overlay" role="dialog" aria-label="Rotate device to landscape">
+        <div class="rotate-card">
+          <div class="rotate-phone-icon" aria-hidden="true">
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+              <rect x="20" y="8" width="24" height="44" rx="5" stroke="#22C55E" stroke-width="3.5" fill="rgba(34,197,94,0.12)"/>
+              <circle cx="32" cy="45" r="2.2" fill="#22C55E"/>
+              <path d="M50 22C54 28 53 38 46 44" stroke="#FACC15" stroke-width="3" stroke-linecap="round"/>
+              <path d="M48 39L46 45L52 44" stroke="#FACC15" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h2>Rotate Phone to Landscape</h2>
+          <p>Pitch Legends 3D plays sideways for a wide stadium view and comfy thumb controls.</p>
+          <button type="button" class="btn-primary" id="rotate-lock-btn">Lock Fullscreen Landscape</button>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
+    <script>
+      if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

@@ -24,6 +24,13 @@ export function renderTopBar(profile, backAction = null, title = '') {
         ${title ? `<h2 class="topbar-screen-title">${title}</h2>` : ''}
       </div>
       <div class="topbar-stats">
+        ${
+          !backAction
+            ? `<a class="download-chip" href="./pitch-legends-3d-offline.html" download="Pitch-Legends-3D.html" title="Download single offline game file">
+                ⬇ Save Offline
+              </a>`
+            : ''
+        }
         <div class="stat-chip" title="Unlocked Superstars">
           <span class="stat-label">Stars</span>
           <strong>${unlockedPlayersCount}/${UNLOCKABLE_PLAYERS.length}</strong>
@@ -49,10 +56,9 @@ export function renderHomeScreen(profile) {
       ${renderTopBar(profile)}
       <main class="home-hero">
         <div class="hero-copy">
-          <h1>Play Real Clubs.<br/>Unlock Legends.</h1>
+          <h1>Play Real Clubs. Unlock Legends.</h1>
           <p class="hero-lead">
-            Jump into fast, kid-friendly 5v5 3D football with real stars, unlockable stadiums,
-            and live 3-device Wi-Fi matches on phones, tablets &amp; laptops.
+            Fast, kid-friendly 5v5 3D football with real stars, unlockable stadiums, and 3-device Wi-Fi play.
           </p>
         </div>
 
@@ -60,22 +66,22 @@ export function renderHomeScreen(profile) {
           <button class="action-card primary-card" id="home-play-solo">
             <div class="card-kicker">1 Player vs AI</div>
             <h3>Play Match</h3>
-            <p>Pick Real Madrid, Man City, Barcelona, Liverpool &amp; more. Kid-friendly Rookie mode ready!</p>
+            <p>Pick your club, opponent &amp; stadium in 3 quick taps. Rookie Kid Mode ready!</p>
             <span class="card-cta">Kick Off →</span>
           </button>
 
-          <button class="action-card wifi-card" id="home-play-multi">
-            <div class="card-kicker">Up to 3 Devices on Wi-Fi</div>
-            <h3>Play with Friends</h3>
-            <p>Scan a QR code on phones, tablets or laptops for 3-player Co-op or 2v1 on your home Wi-Fi.</p>
-            <span class="card-cta">Open Wi-Fi Lobby →</span>
+          <button class="action-card shop-card" id="home-open-shop">
+            <div class="card-kicker">${profile.coins} Coins${activeDraftCount > 0 ? ` · ${activeDraftCount} Drafted` : ''}</div>
+            <h3>Players &amp; Stadiums</h3>
+            <p>Unlock Ronaldo, Pelé, Ronaldinho, Maradona, Camp Nou, Anfield &amp; Maracanã.</p>
+            <span class="card-cta">Open Locker →</span>
           </button>
 
-          <button class="action-card shop-card" id="home-open-shop">
-            <div class="card-kicker">${profile.coins} Coins Ready${activeDraftCount > 0 ? ` · ${activeDraftCount} Stars Drafted` : ''}</div>
-            <h3>Unlock Players &amp; Stadiums</h3>
-            <p>Unlock Cristiano Ronaldo, Pelé, Ronaldinho, Maradona, Camp Nou, Anfield &amp; Maracanã!</p>
-            <span class="card-cta">Open Locker Room →</span>
+          <button class="action-card wifi-card" id="home-play-multi">
+            <div class="card-kicker">3 Devices on Wi-Fi</div>
+            <h3>Multiplayer</h3>
+            <p>Connect up to 3 devices on home Wi-Fi for Co-op or 2v1 matches.</p>
+            <span class="card-cta">Wi-Fi Lobby →</span>
           </button>
         </div>
       </main>
@@ -83,25 +89,49 @@ export function renderHomeScreen(profile) {
   `;
 }
 
-export function renderMatchSetupScreen(profile, setup) {
+export function renderMatchSetupScreen(profile, setup, step = 1) {
   const homeClub = getClubById(setup.homeClubId);
   const awayClub = getClubById(setup.awayClubId);
+  const stadium = getStadiumById(setup.stadiumId);
   const homeRoster = buildEffectiveRoster(setup.homeClubId, profile.activeDraft);
   const awayRoster = buildEffectiveRoster(setup.awayClubId, []);
 
+  const stepMeta = [
+    { n: 1, label: 'Your Club' },
+    { n: 2, label: 'Opponent' },
+    { n: 3, label: 'Stadium & Rules' },
+  ];
+
+  const renderStepper = () => `
+    <nav class="wizard-stepper" aria-label="Match setup steps">
+      ${stepMeta
+        .map(
+          (s) => `
+        <button class="step-pill ${step === s.n ? 'active' : step > s.n ? 'done' : ''}" data-goto-step="${s.n}">
+          <span class="step-num">${s.n}</span>
+          <span>${s.label}</span>
+        </button>
+      `
+        )
+        .join('')}
+    </nav>
+  `;
+
   const renderClubOption = (club, selectedId, side) => `
     <button class="club-pill ${club.id === selectedId ? 'selected' : ''}" data-pick-club="${side}" data-club-id="${club.id}">
-      ${renderClubBadgeSVG(club, 34)}
+      ${renderClubBadgeSVG(club, 32)}
       <div class="club-pill-info">
         <strong>${club.name}</strong>
-        <span>${club.league} · OVR ${club.rating}</span>
+        <span>OVR ${club.rating}</span>
       </div>
     </button>
   `;
 
-  const renderRosterLine = (roster, isCustom) => `
-    <div class="roster-preview">
-      <div class="roster-preview-title">Starting 5 ${isCustom && profile.activeDraft.length > 0 ? `(Includes ${profile.activeDraft.length} Unlocked Stars!)` : ''}</div>
+  const renderRosterList = (roster, isCustom) => `
+    <div class="wizard-roster">
+      <div class="roster-preview-title">
+        Starting 5 ${isCustom && profile.activeDraft.length > 0 ? `(+${profile.activeDraft.length} Unlocked Stars)` : ''}
+      </div>
       <div class="roster-tags">
         ${roster
           .map(
@@ -116,89 +146,134 @@ export function renderMatchSetupScreen(profile, setup) {
     </div>
   `;
 
-  return `
-    <div class="menu-shell setup-shell">
-      ${renderTopBar(profile, true, 'Match Setup')}
-      <main class="setup-grid">
-        <section class="setup-panel">
-          <div class="panel-header">
-            <h3>Your Club (Home)</h3>
-            <span class="selected-club-tag">${homeClub.name}</span>
-          </div>
-          <div class="club-grid">
+  let bodyHtml = '';
+
+  if (step === 1) {
+    bodyHtml = `
+      <main class="wizard-body">
+        <section class="wizard-main-col">
+          <div class="club-grid-4">
             ${CLUBS.map((c) => renderClubOption(c, setup.homeClubId, 'home')).join('')}
           </div>
-          ${renderRosterLine(homeRoster, true)}
         </section>
 
-        <section class="setup-panel">
-          <div class="panel-header">
-            <h3>Opponent Club (Away)</h3>
-            <span class="selected-club-tag">${awayClub.name}</span>
+        <aside class="wizard-side-col">
+          <div class="selected-spotlight">
+            ${renderClubBadgeSVG(homeClub, 54)}
+            <div>
+              <div class="spot-kicker">YOUR TEAM (HOME)</div>
+              <h3>${homeClub.name}</h3>
+              <div class="spot-sub">${homeClub.league} · Team OVR ${homeClub.rating}</div>
+            </div>
           </div>
-          <div class="club-grid">
+          ${renderRosterList(homeRoster, true)}
+          <div class="wizard-nav-row">
+            <button class="btn-primary full-btn" id="wizard-next-btn">Next: Pick Opponent →</button>
+          </div>
+        </aside>
+      </main>
+    `;
+  } else if (step === 2) {
+    bodyHtml = `
+      <main class="wizard-body">
+        <section class="wizard-main-col">
+          <div class="club-grid-4">
             ${CLUBS.map((c) => renderClubOption(c, setup.awayClubId, 'away')).join('')}
           </div>
-          ${renderRosterLine(awayRoster, false)}
         </section>
 
-        <section class="setup-panel setup-bottom-panel">
-          <div class="setup-row-split">
-            <div class="setup-field">
-              <label>Stadium (Live 3D Preview)</label>
-              <div class="stadium-picker">
-                ${STADIUMS.map((s) => {
-                  const unlocked = profile.unlockedStadiums.includes(s.id);
-                  const active = setup.stadiumId === s.id;
-                  return `
-                    <button class="stadium-chip ${active ? 'selected' : ''} ${unlocked ? '' : 'locked'}"
-                            data-pick-stadium="${s.id}" ${unlocked ? '' : 'data-locked="true"'}>
-                      <strong>${s.name}</strong>
-                      <span>${unlocked ? s.timeOfDay : `Locked · ${s.cost} Coins`}</span>
-                    </button>
-                  `;
-                }).join('')}
-              </div>
+        <aside class="wizard-side-col">
+          <div class="matchup-card">
+            <div class="matchup-side">
+              ${renderClubBadgeSVG(homeClub, 44)}
+              <strong>${homeClub.shortName}</strong>
             </div>
-
-            <div class="setup-controls-col">
-              <div class="setup-field">
-                <label>Difficulty</label>
-                <div class="segmented-group">
-                  ${Object.entries(DIFFICULTIES)
-                    .map(
-                      ([key, d]) => `
-                    <button class="seg-btn ${setup.difficulty === key ? 'selected' : ''}" data-pick-diff="${key}">
-                      ${d.label}
-                    </button>
-                  `
-                    )
-                    .join('')}
-                </div>
-              </div>
-
-              <div class="setup-field">
-                <label>Match Length</label>
-                <div class="segmented-group">
-                  ${[120, 180, 300]
-                    .map(
-                      (sec) => `
-                    <button class="seg-btn ${setup.durationSeconds === sec ? 'selected' : ''}" data-pick-duration="${sec}">
-                      ${sec / 60} Min
-                    </button>
-                  `
-                    )
-                    .join('')}
-                </div>
-              </div>
-
-              <button class="btn-primary kickoff-big-btn" id="setup-kickoff-btn">
-                KICK OFF MATCH!
-              </button>
+            <span class="matchup-vs">VS</span>
+            <div class="matchup-side">
+              ${renderClubBadgeSVG(awayClub, 44)}
+              <strong>${awayClub.shortName}</strong>
             </div>
           </div>
-        </section>
+          ${renderRosterList(awayRoster, false)}
+          <div class="wizard-nav-row">
+            <button class="btn-secondary" id="wizard-prev-btn">← Back</button>
+            <button class="btn-primary flex-1" id="wizard-next-btn">Next: Stadium →</button>
+          </div>
+        </aside>
       </main>
+    `;
+  } else {
+    bodyHtml = `
+      <main class="wizard-body">
+        <section class="wizard-main-col">
+          <div class="stadium-picker-3">
+            ${STADIUMS.map((s) => {
+              const unlocked = profile.unlockedStadiums.includes(s.id);
+              const active = setup.stadiumId === s.id;
+              return `
+                <button class="stadium-chip ${active ? 'selected' : ''} ${unlocked ? '' : 'locked'}"
+                        data-pick-stadium="${s.id}" ${unlocked ? '' : 'data-locked="true"'}>
+                  <div class="st-bar" style="background: linear-gradient(90deg, ${s.skyTop}, ${s.skyHorizon}, ${s.grassA});"></div>
+                  <strong>${s.name}</strong>
+                  <span>${unlocked ? s.timeOfDay : `Unlock · ${s.cost} Coins`}</span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </section>
+
+        <aside class="wizard-side-col">
+          <div class="matchup-mini">
+            <span>${homeClub.shortName} vs ${awayClub.shortName}</span>
+            <strong>${stadium.name}</strong>
+          </div>
+
+          <div class="setup-field">
+            <label>Difficulty</label>
+            <div class="segmented-group">
+              ${Object.entries(DIFFICULTIES)
+                .map(
+                  ([key, d]) => `
+                <button class="seg-btn ${setup.difficulty === key ? 'selected' : ''}" data-pick-diff="${key}">
+                  ${key === 'rookie' ? 'Rookie' : d.label}
+                </button>
+              `
+                )
+                .join('')}
+            </div>
+          </div>
+
+          <div class="setup-field">
+            <label>Match Time</label>
+            <div class="segmented-group">
+              ${[120, 180, 300]
+                .map(
+                  (sec) => `
+                <button class="seg-btn ${setup.durationSeconds === sec ? 'selected' : ''}" data-pick-duration="${sec}">
+                  ${sec / 60} Min
+                </button>
+              `
+                )
+                .join('')}
+            </div>
+          </div>
+
+          <div class="wizard-nav-row">
+            <button class="btn-secondary" id="wizard-prev-btn">← Back</button>
+            <button class="btn-primary flex-1 kickoff-big-btn" id="setup-kickoff-btn">KICK OFF!</button>
+          </div>
+        </aside>
+      </main>
+    `;
+  }
+
+  return `
+    <div class="menu-shell setup-shell">
+      <div class="setup-header-bar">
+        ${renderTopBar(profile, true, '')}
+        ${renderStepper()}
+      </div>
+      ${bodyHtml}
     </div>
   `;
 }

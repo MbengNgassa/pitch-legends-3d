@@ -1600,42 +1600,373 @@ select:focus {
 }
 
 /* ===========================
-   RESPONSIVE BREAKPOINTS
+   SAVE OFFLINE CHIP & ROTATE-TO-LANDSCAPE GUARD
    =========================== */
-@media (max-width: 960px) {
-  .home-cards,
-  .setup-grid,
-  .setup-row-split,
-  .lobby-grid,
-  .mp-split {
-    grid-template-columns: 1fr;
-  }
+.download-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #e0f2fe;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
 
-  .stadium-picker {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.download-chip:hover {
+  background: rgba(56, 189, 248, 0.28);
+}
+
+#rotate-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(8, 14, 20, 0.96);
+  backdrop-filter: blur(14px);
+  padding: 28px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.rotate-card {
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.rotate-phone-icon {
+  animation: rotateHint 2.2s ease-in-out infinite;
+}
+
+@keyframes rotateHint {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-90deg); }
+}
+
+.rotate-card h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 34px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.rotate-card p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* Lock phones to landscape when held vertically */
+@media (orientation: portrait) and (max-width: 900px) {
+  #rotate-overlay {
+    display: flex;
   }
 }
 
-@media (max-width: 640px) {
-  .club-grid {
-    grid-template-columns: 1fr;
+/* ===========================
+   3-PAGE MATCH SETUP WIZARD
+   =========================== */
+.setup-header-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wizard-stepper {
+  max-width: 1120px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  gap: 8px;
+}
+
+.step-pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--bg-glass-strong);
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.step-pill.active {
+  background: rgba(34, 197, 94, 0.24);
+  border-color: var(--emerald);
+  color: #ffffff;
+}
+
+.step-pill.done {
+  color: #dcfce7;
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.step-pill.active .step-num {
+  background: var(--emerald);
+  color: #052e16;
+}
+
+.wizard-body {
+  max-width: 1120px;
+  width: 100%;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 14px;
+  align-items: stretch;
+  flex: 1;
+}
+
+.wizard-main-col,
+.wizard-side-col {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.club-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stadium-picker-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.st-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  margin-bottom: 4px;
+}
+
+.selected-spotlight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spot-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: var(--emerald);
+}
+
+.selected-spotlight h3 {
+  margin: 2px 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.spot-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.matchup-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.matchup-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+
+.matchup-vs {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--gold-bright);
+}
+
+.matchup-mini {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 13px;
+}
+
+.matchup-mini strong {
+  color: var(--gold-bright);
+}
+
+.wizard-roster {
+  flex: 1;
+}
+
+.wizard-nav-row {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+/* ===========================
+   LANDSCAPE PHONE COMPACT TUNING
+   =========================== */
+@media (max-height: 520px) and (orientation: landscape) {
+  html,
+  body,
+  #app-stage {
+    min-height: 100vh;
   }
 
-  .room-code-banner {
-    flex-direction: column;
-    text-align: center;
+  .menu-shell {
+    padding: 10px 16px 14px;
+    gap: 10px;
   }
 
+  .brand-ball {
+    width: 34px;
+    height: 34px;
+    font-size: 17px;
+  }
+
+  .brand-title {
+    font-size: 20px;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .stat-chip,
+  .coin-chip,
+  .download-chip {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .home-hero {
+    gap: 12px;
+  }
+
+  .hero-copy h1 {
+    font-size: 34px;
+  }
+
+  .hero-lead {
+    margin-top: 4px;
+    font-size: 13px;
+  }
+
+  .home-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .action-card {
+    padding: 14px;
+    gap: 5px;
+  }
+
+  .action-card h3 {
+    font-size: 23px;
+  }
+
+  .action-card p {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .card-cta {
+    margin-top: 2px;
+    font-size: 13px;
+  }
+
+  .step-pill {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .wizard-main-col,
+  .wizard-side-col {
+    padding: 11px;
+    gap: 8px;
+  }
+
+  .club-pill {
+    padding: 6px 8px;
+    gap: 7px;
+  }
+
+  .club-pill-info strong {
+    font-size: 13px;
+  }
+
+  .roster-tag {
+    font-size: 11px;
+    padding: 3px 7px;
+  }
+
+  .stadium-chip {
+    padding: 7px 9px;
+  }
+
+  .kickoff-big-btn {
+    padding: 10px 14px;
+    font-size: 20px;
+  }
+
+  /* Compact in-match HUD for landscape phone */
   .hud-topbar {
     top: 8px;
-    left: 8px;
-    right: 8px;
-    flex-wrap: wrap;
-    gap: 6px;
+    left: 12px;
+    right: 12px;
   }
 
   .scorebug {
-    padding: 5px 10px;
+    padding: 4px 10px;
     gap: 8px;
   }
 
@@ -1645,7 +1976,7 @@ select:focus {
 
   .scorebug-score {
     font-size: 22px;
-    padding: 2px 8px;
+    padding: 1px 9px;
   }
 
   .scorebug-clock {
@@ -1660,14 +1991,13 @@ select:focus {
 
   .hud-bottom {
     bottom: auto;
-    top: 64px;
-    left: 8px;
-    right: 8px;
+    top: 54px;
+    left: 12px;
   }
 
   .player-status-card {
     width: 172px;
-    padding: 7px 10px;
+    padding: 6px 10px;
   }
 
   .controls-legend {
@@ -1675,27 +2005,41 @@ select:focus {
   }
 
   .touch-joystick-zone {
-    left: 12px;
-    bottom: 16px;
-    width: 132px;
-    height: 132px;
+    left: 16px;
+    bottom: 12px;
+    width: 124px;
+    height: 124px;
   }
 
   .touch-joystick-base {
-    width: 112px;
-    height: 112px;
+    width: 106px;
+    height: 106px;
   }
 
   .touch-buttons-pad {
-    right: 12px;
-    bottom: 16px;
-    grid-template-columns: repeat(2, 66px);
-    gap: 10px;
+    right: 16px;
+    bottom: 12px;
+    grid-template-columns: repeat(2, 62px);
+    gap: 9px;
   }
 
   .touch-btn {
-    width: 66px;
-    height: 66px;
-    font-size: 16px;
+    width: 62px;
+    height: 62px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    font-size: 13px;
+    letter-spacing: 0.4px;
   }
 }
+
+@media (max-width: 960px) and (min-height: 521px) {
+  .home-cards,
+  .wizard-body,
+  .lobby-grid,
+  .mp-split {
+    grid-template-columns: 1fr;
+  }
+}
+

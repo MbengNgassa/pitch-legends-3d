@@ -57,6 +57,7 @@ export class HudOverlay {
           </div>
 
           <div class="hud-actions">
+            <button id="hud-fs-btn" class="hud-icon-btn" title="Fullscreen Landscape">Full</button>
             <button id="hud-touch-toggle" class="hud-icon-btn" title="Toggle Touch Controls">
               ${showTouch ? 'Touch: ON' : 'Touch'}
             </button>
@@ -127,6 +128,10 @@ export class HudOverlay {
   }
 
   _bindEvents() {
+    this.root.querySelector('#hud-fs-btn')?.addEventListener('click', () => {
+      this.callbacks.onToggleFullscreen?.();
+    });
+
     const muteBtn = this.root.querySelector('#hud-mute-btn');
     muteBtn?.addEventListener('click', () => {
       const isMuted = this.callbacks.onToggleMute();

@@ -52,6 +52,7 @@ class PitchLegendsApp {
   constructor() {
     this.profile = loadProfile();
     this.screen = 'home'; // 'home' | 'setup' | 'shop' | 'mp-entry' | 'mp-lobby' | 'match'
+    this.setupStep = 1; // 1: Your Club, 2: Opponent, 3: Stadium & Rules
     this.shopTab = 'players';
     this.previewStadiumId = 'bernabeu';
 
@@ -92,9 +93,14 @@ class PitchLegendsApp {
         soundEngine.setMuted(next);
         return next;
       },
+      onToggleFullscreen: () => this.toggleLandscapeFullscreen(),
       onExitMatch: () => this.exitMatch('home'),
       onRematch: () => this.handleRematch(),
       onOpenShop: () => this.exitMatch('shop'),
+    });
+
+    document.getElementById('rotate-lock-btn')?.addEventListener('click', () => {
+      this.requestLandscapeLock();
     });
 
     this._bindKeyboard();
@@ -367,9 +373,42 @@ class PitchLegendsApp {
     };
   }
 
+  async requestLandscapeLock() {
+    try {
+      const el = document.documentElement;
+      if (!document.fullscreenElement && el.requestFullscreen) {
+        await el.requestFullscreen();
+      }
+    } catch {
+      // Ignore fullscreen rejection on browsers that don't support it
+    }
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape');
+      }
+    } catch {
+      // Ignore orientation lock if unsupported (e.g. iOS Safari)
+    }
+  }
+
+  async toggleLandscapeFullscreen() {
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else {
+        await this.requestLandscapeLock();
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
   startSoloMatch() {
     soundEngine.unlock();
     soundEngine.playClick();
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+      this.requestLandscapeLock();
+    }
     this.isMultiplayer = false;
     this.mpSlotId = 'p1';
     this.rewardsAwarded = false;
@@ -431,6 +470,7 @@ class PitchLegendsApp {
       this.uiRoot.querySelector('#home-play-solo')?.addEventListener('click', () => {
         soundEngine.unlock();
         soundEngine.playClick();
+        this.setupStep = 1;
         this.screen = 'setup';
         this.renderer.loadShowcase(this.setup.stadiumId, this.setup.homeClubId, this.setup.awayClubId);
         this.renderUI();
@@ -452,10 +492,32 @@ class PitchLegendsApp {
     }
 
     if (this.screen === 'setup') {
-      this.uiRoot.innerHTML = renderMatchSetupScreen(this.profile, this.setup);
+      this.uiRoot.innerHTML = renderMatchSetupScreen(this.profile, this.setup, this.setupStep);
       this.uiRoot.querySelector('#menu-back-btn')?.addEventListener('click', () => {
         soundEngine.playClick();
-        this.screen = 'home';
+        if (this.setupStep > 1) {
+          this.setupStep -= 1;
+          this.renderUI();
+        } else {
+          this.screen = 'home';
+          this.renderUI();
+        }
+      });
+      this.uiRoot.querySelectorAll('[data-goto-step]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          soundEngine.playClick();
+          this.setupStep = Number(btn.dataset.gotoStep) || 1;
+          this.renderUI();
+        });
+      });
+      this.uiRoot.querySelector('#wizard-prev-btn')?.addEventListener('click', () => {
+        soundEngine.playClick();
+        this.setupStep = Math.max(1, this.setupStep - 1);
+        this.renderUI();
+      });
+      this.uiRoot.querySelector('#wizard-next-btn')?.addEventListener('click', () => {
+        soundEngine.playClick();
+        this.setupStep = Math.min(3, this.setupStep + 1);
         this.renderUI();
       });
       this.uiRoot.querySelectorAll('[data-pick-club]').forEach((btn) => {

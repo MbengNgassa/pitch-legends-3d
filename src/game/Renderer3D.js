@@ -415,26 +415,25 @@ export class Renderer3D {
       const sx = scorer ? scorer.x : this.ballGroup.position.x;
       const sz = scorer ? scorer.z : this.ballGroup.position.z;
       const orbitAngle = this.elapsed * 1.25;
-      const desiredPos = new THREE.Vector3(sx + Math.cos(orbitAngle) * 14, 7.5, sz + Math.sin(orbitAngle) * 14);
-      const desiredTarget = new THREE.Vector3(sx, 2.1, sz);
+      const desiredPos = new THREE.Vector3(sx + Math.cos(orbitAngle) * 13, 6.8, sz + Math.sin(orbitAngle) * 13);
+      const desiredTarget = new THREE.Vector3(sx, 2.5, sz);
       this.cameraPos.lerp(desiredPos, Math.min(1, clampedDt * 4.5));
       this.cameraTarget.lerp(desiredTarget, Math.min(1, clampedDt * 6));
     } else {
-      // Focus smoothly between the ball and the local human player so kids always see both!
+      // Closer console-style broadcast framing so players, jerseys & ball look big and clear on landscape phones!
       const focusX = localPlayerState ? b.x * 0.72 + localPlayerState.x * 0.28 : b.x;
       const focusZ = localPlayerState ? b.z * 0.72 + localPlayerState.z * 0.28 : b.z;
-      const clampedX = Math.max(-24, Math.min(24, focusX * 0.85));
-      const clampedZ = Math.max(-10, Math.min(12, focusZ * 0.55));
+      const clampedX = Math.max(-25, Math.min(25, focusX * 0.88));
+      const clampedZ = Math.max(-11, Math.min(13, focusZ * 0.58));
 
-      // Slightly tighter zoom when near either goal, and pull back on portrait phones so the pitch stays wide & clear!
-      const portraitBoost = this.camera.aspect < 1 ? Math.min(18, (1 / Math.max(0.45, this.camera.aspect) - 1) * 18) : 0;
-      const boxZoom = Math.min(4.5, Math.max(0, (Math.abs(b.x) - 18) * 0.22));
+      const portraitBoost = this.camera.aspect < 1 ? Math.min(16, (1 / Math.max(0.45, this.camera.aspect) - 1) * 16) : 0;
+      const boxZoom = Math.min(3.5, Math.max(0, (Math.abs(b.x) - 18) * 0.18));
       const desiredPos = new THREE.Vector3(
-        clampedX * 0.88,
-        25.5 + portraitBoost * 0.85 - boxZoom * 0.6,
-        33.5 + portraitBoost * 1.05 - boxZoom + clampedZ * 0.45
+        clampedX * 0.9,
+        19.2 + portraitBoost * 0.8 - boxZoom * 0.5,
+        25.8 + portraitBoost * 1.0 - boxZoom + clampedZ * 0.48
       );
-      const desiredTarget = new THREE.Vector3(clampedX, 1.2, clampedZ * 0.6);
+      const desiredTarget = new THREE.Vector3(clampedX, 1.6, clampedZ * 0.65);
 
       this.cameraPos.lerp(desiredPos, Math.min(1, clampedDt * 5.2));
       this.cameraTarget.lerp(desiredTarget, Math.min(1, clampedDt * 6.5));

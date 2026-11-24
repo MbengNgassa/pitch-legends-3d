@@ -1,0 +1,19 @@
+{
+  "name": "Pitch Legends 3D",
+  "short_name": "Pitch Legends",
+  "description": "Kid-friendly 3D football game with real clubs, unlockable stars & stadiums, and 3-device Wi-Fi multiplayer.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b1218",
+  "theme_color": "#16a34a",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

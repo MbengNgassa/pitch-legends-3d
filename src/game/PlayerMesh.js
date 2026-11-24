@@ -18,8 +18,9 @@ export class PlayerMesh {
     this.bodyRoot = new THREE.Group();
     this.group.add(this.bodyRoot);
 
+    this.baseScale = 1.46;
     this.scaleY = playerMeta.height || 1.0;
-    this.bodyRoot.scale.set(1, this.scaleY, 1);
+    this.bodyRoot.scale.set(this.baseScale, this.baseScale * this.scaleY, this.baseScale);
 
     this.hasCustomModel = false;
     this.customModelRoot = null;
@@ -29,7 +30,7 @@ export class PlayerMesh {
     this._buildNameplate();
 
     // Check asynchronously if a Blender GLB exists in public/models/manifest.json
-    modelLoader.loadPlayerModel(playerMeta.id, 2.08 * this.scaleY).then((glb) => {
+    modelLoader.loadPlayerModel(playerMeta.id, 2.08 * this.baseScale * this.scaleY).then((glb) => {
       if (!glb) return;
       this.hasCustomModel = true;
       this.proceduralRig.visible = false;
@@ -286,10 +287,10 @@ export class PlayerMesh {
     const shadowMat = new THREE.MeshBasicMaterial({
       color: '#000000',
       transparent: true,
-      opacity: 0.26,
+      opacity: 0.28,
       depthWrite: false,
     });
-    this.contactShadow = new THREE.Mesh(new THREE.CircleGeometry(0.75, 20), shadowMat);
+    this.contactShadow = new THREE.Mesh(new THREE.CircleGeometry(1.05, 20), shadowMat);
     this.contactShadow.rotation.x = -Math.PI / 2;
     this.contactShadow.position.y = 0.03;
     this.group.add(this.contactShadow);
@@ -307,36 +308,36 @@ export class PlayerMesh {
       side: THREE.DoubleSide,
       depthWrite: false,
     });
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.18, 28), this.ringMat);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.22, 1.54, 28), this.ringMat);
     ring.rotation.x = -Math.PI / 2;
     this.ringGroup.add(ring);
 
     // Forward aim arrow triangle pointing +X
     const arrowShape = new THREE.Shape();
-    arrowShape.moveTo(1.75, 0);
-    arrowShape.lineTo(1.22, 0.36);
-    arrowShape.lineTo(1.22, -0.36);
+    arrowShape.moveTo(2.22, 0);
+    arrowShape.lineTo(1.62, 0.44);
+    arrowShape.lineTo(1.62, -0.44);
     arrowShape.closePath();
     const arrowGeo = new THREE.ShapeGeometry(arrowShape);
     arrowGeo.rotateX(-Math.PI / 2);
     this.aimArrow = new THREE.Mesh(arrowGeo, this.ringMat);
     this.ringGroup.add(this.aimArrow);
 
-    // Shot charge arc bar right in front of the player on the grass
+    // Shot charge bar right on the grass
     const chargeBg = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.7, 0.24),
-      new THREE.MeshBasicMaterial({ color: '#0B1218', transparent: true, opacity: 0.75, depthWrite: false })
+      new THREE.PlaneGeometry(2.1, 0.3),
+      new THREE.MeshBasicMaterial({ color: '#0B1218', transparent: true, opacity: 0.78, depthWrite: false })
     );
     chargeBg.rotation.x = -Math.PI / 2;
-    chargeBg.position.set(0, 0.02, -1.65);
+    chargeBg.position.set(0, 0.02, -2.05);
     this.chargeGroup = new THREE.Group();
     this.chargeGroup.visible = false;
     this.chargeGroup.add(chargeBg);
 
     this.chargeFillMat = new THREE.MeshBasicMaterial({ color: '#FACC15', depthWrite: false });
-    this.chargeFill = new THREE.Mesh(new THREE.PlaneGeometry(1.62, 0.16), this.chargeFillMat);
+    this.chargeFill = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.2), this.chargeFillMat);
     this.chargeFill.rotation.x = -Math.PI / 2;
-    this.chargeFill.position.set(0, 0.03, -1.65);
+    this.chargeFill.position.set(0, 0.03, -2.05);
     this.chargeGroup.add(this.chargeFill);
     this.group.add(this.chargeGroup);
 
@@ -344,11 +345,11 @@ export class PlayerMesh {
     this.superRingMat = new THREE.MeshBasicMaterial({
       color: '#F59E0B',
       transparent: true,
-      opacity: 0.78,
+      opacity: 0.82,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
-    this.superRing = new THREE.Mesh(new THREE.RingGeometry(1.28, 1.46, 28), this.superRingMat);
+    this.superRing = new THREE.Mesh(new THREE.RingGeometry(1.64, 1.88, 28), this.superRingMat);
     this.superRing.rotation.x = -Math.PI / 2;
     this.superRing.position.y = 0.06;
     this.superRing.visible = false;
@@ -359,7 +360,7 @@ export class PlayerMesh {
     this.currentLabel = '';
     this.currentAccent = '';
     this.nameSprite = createNameplateSprite(this.data.name, this.club.accent || '#FFFFFF');
-    this.nameSprite.position.set(0, 2.75 * this.scaleY, 0);
+    this.nameSprite.position.set(0, 3.85 * this.scaleY, 0);
     this.nameSprite.visible = false;
     this.group.add(this.nameSprite);
   }
@@ -401,7 +402,7 @@ export class PlayerMesh {
       this.chargeGroup.visible = true;
       const pct = Math.min(1, state.shotCharge);
       this.chargeFill.scale.x = Math.max(0.05, pct);
-      this.chargeFill.position.x = -0.81 * (1 - pct);
+      this.chargeFill.position.x = -1.0 * (1 - pct);
       this.chargeFillMat.color.set(pct > 0.78 ? '#EF4444' : pct > 0.45 ? '#F59E0B' : '#22C55E');
     } else {
       this.chargeGroup.visible = false;
@@ -418,14 +419,15 @@ export class PlayerMesh {
 
     // Nameplate for human-controlled players or the active ball carrier
     if (humanInfo || isBallOwner) {
-      const label = humanInfo ? `${humanInfo.name} · ${this.data.name}` : this.data.name;
+      const showHumanPrefix = humanInfo && humanInfo.name && humanInfo.name !== 'Player 1' && humanInfo.name !== 'You';
+      const label = showHumanPrefix ? `${humanInfo.name} · ${this.data.name}` : this.data.name;
       const accent = humanInfo ? humanInfo.color : '#FFFFFF';
       if (label !== this.currentLabel || accent !== this.currentAccent) {
         this.group.remove(this.nameSprite);
         this.nameSprite.material.map?.dispose();
         this.nameSprite.material.dispose();
         this.nameSprite = createNameplateSprite(label, accent);
-        this.nameSprite.position.set(0, 2.75 * this.scaleY, 0);
+        this.nameSprite.position.set(0, 3.85 * this.scaleY, 0);
         this.group.add(this.nameSprite);
         this.currentLabel = label;
         this.currentAccent = accent;
