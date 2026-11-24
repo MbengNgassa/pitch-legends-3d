@@ -745,7 +745,8 @@ export class MatchEngine {
 
   _stepGoalkeeper(gk, dt) {
     const dir = gk.team === 'home' ? 1 : -1;
-    const goalLineX = -dir * (PITCH.halfLength - 2.3);
+    const ownGoalX = -dir * PITCH.halfLength;
+    const goalLineX = -dir * (PITCH.halfLength - 2.4);
     const hasBall = this.ball.ownerId === gk.id;
 
     if (gk.diveTimer > 0) {
@@ -759,44 +760,65 @@ export class MatchEngine {
       gk.vx = 0;
       gk.vz = 0;
       gk.facing = dir > 0 ? 0 : Math.PI;
-      // Quickly distribute to a teammate (favoring human teammates!)
+      // Hold briefly, then kick/punt crisply upfield to an open teammate (favoring human teammates!)
       if (gk.kickCooldown <= 0) {
         const mates = this.players.filter((p) => p.team === gk.team && !p.isGK);
         mates.sort((a, b) => {
-          const ha = a.humanSlotId ? -15 : 0;
-          const hb = b.humanSlotId ? -15 : 0;
-          return (ha + Math.abs(a.x - gk.x)) - (hb + Math.abs(b.x - gk.x));
+          const ha = a.humanSlotId ? -22 : 0;
+          const hb = b.humanSlotId ? -22 : 0;
+          const da = Math.abs(a.x - gk.x);
+          const db = Math.abs(b.x - gk.x);
+          return (ha + da) - (hb + db);
         });
         const target = mates[0];
         if (target) {
-          const d = normalize2(target.x - gk.x, target.z - gk.z);
+          const leadX = clamp(target.x + dir * 4, -PITCH.halfLength + 6, PITCH.halfLength - 6);
+          const leadZ = clamp(target.z, -PITCH.halfWidth + 5, PITCH.halfWidth - 5);
+          const dx = leadX - gk.x;
+          const dz = leadZ - gk.z;
+          const dist = Math.hypot(dx, dz);
+          const d = normalize2(dx, dz);
+          const kickSpeed = clamp(28 + dist * 0.62, 30, 46);
+
           this.ball.ownerId = null;
           this.ball.lastTouchId = gk.id;
           this.ball.lastTouchTeam = gk.team;
-          this.ball.vx = d.x * 23;
-          this.ball.vz = d.z * 23;
-          this.ball.vy = 2.6;
-          gk.kickCooldown = 0.5;
-          this._emit('pass', { x: gk.x, z: gk.z });
+          this.ball.passTargetId = target.id;
+          this.ball.passAssistTimer = 1.65;
+          this.ball.isSuper = false;
+          this.ball.vx = d.x * kickSpeed;
+          this.ball.vz = d.z * kickSpeed;
+          this.ball.vy = dist > 26 ? 5.8 : 3.2;
+          gk.kickCooldown = 0.65;
+          this._emit('kick', { x: gk.x, z: gk.z, power: 0.8, playerId: gk.id });
         }
       }
       return;
     }
 
-    // Track ball Z along goal mouth
-    const targetZ = clamp(this.ball.z * 0.72, -PITCH.goalHalfWidth + 1.2, PITCH.goalHalfWidth - 1.2);
-    const ballApproaching = (this.ball.vx * -dir) > 6 && Math.abs(this.ball.x - goalLineX) < 18;
-    const targetX = goalLineX + (ballApproaching ? dir * 1.4 : 0);
+    const distBallFromGoalLine = Math.abs(this.ball.x - ownGoalX);
+    const ballSpeed = Math.hypot(this.ball.vx, this.ball.vz);
+    const ballFreeInBox = !this.ball.ownerId && distBallFromGoalLine < 18 && Math.abs(this.ball.z) < 17 && ballSpeed < 18;
+    const ballApproaching = (this.ball.vx * -dir) > 6 && distBallFromGoalLine < 24;
+
+    let targetX = goalLineX + (ballApproaching ? dir * 1.8 : 0);
+    let targetZ = clamp(this.ball.z * 0.78, -PITCH.goalHalfWidth + 1.2, PITCH.goalHalfWidth - 1.2);
+
+    // Actively rush out off the goal line to scoop up loose balls inside the penalty box!
+    if (ballFreeInBox) {
+      targetX = clamp(this.ball.x + this.ball.vx * 0.14, -PITCH.halfLength + 1.2, PITCH.halfLength - 1.2);
+      targetZ = clamp(this.ball.z + this.ball.vz * 0.14, -18, 18);
+    }
 
     const dx = targetX - gk.x;
     const dz = targetZ - gk.z;
     const dist = Math.hypot(dx, dz);
-    const gkMaxSpeed = (8.8 + (gk.data.def / 100) * 3.2) * this.diff.gkSpeedMul;
+    const gkMaxSpeed = (9.6 + (gk.data.def / 100) * 3.8) * (ballFreeInBox ? 1.15 : this.diff.gkSpeedMul);
 
     if (dist > 0.25) {
       const n = normalize2(dx, dz);
-      gk.vx = n.x * Math.min(gkMaxSpeed, dist * 5.2);
-      gk.vz = n.z * Math.min(gkMaxSpeed, dist * 5.2);
+      gk.vx = n.x * Math.min(gkMaxSpeed, dist * 5.6);
+      gk.vz = n.z * Math.min(gkMaxSpeed, dist * 5.6);
     } else {
       gk.vx = 0;
       gk.vz = 0;
@@ -804,12 +826,12 @@ export class MatchEngine {
     gk.facing = Math.atan2(this.ball.z - gk.z, this.ball.x - gk.x);
 
     // Diving save attempt if a fast shot enters the box!
-    if (ballApproaching && Math.abs(this.ball.x - gk.x) < 7.5 && Math.abs(this.ball.z - gk.z) < 4.5) {
+    if (ballApproaching && Math.abs(this.ball.x - gk.x) < 8.5 && Math.abs(this.ball.z - gk.z) < 5.5) {
       const saveChance = this.ball.isSuper ? 0.28 : this.diff.aiReaction;
       if (Math.abs(this.ball.z - gk.z) > 1.3 && Math.random() < saveChance * dt * 7.5) {
         gk.diveTimer = 0.45;
         gk.diveDir = Math.sign(this.ball.z - gk.z);
-        gk.vz = gk.diveDir * (13.5 * this.diff.gkSpeedMul);
+        gk.vz = gk.diveDir * (14.5 * this.diff.gkSpeedMul);
       }
     }
   }
@@ -1018,8 +1040,9 @@ export class MatchEngine {
       p.x += p.vx * dt;
       p.z += p.vz * dt;
 
-      // Keep players inside pitch bounds
-      const maxX = PITCH.halfLength - 0.8;
+      // Keep players inside pitch bounds, allowing them to step up to the goal line inside the goal mouth!
+      const inMouthZ = Math.abs(p.z) < PITCH.goalHalfWidth - 0.6;
+      const maxX = inMouthZ ? PITCH.halfLength + 0.6 : PITCH.halfLength - 0.8;
       const maxZ = PITCH.halfWidth - 0.8;
       p.x = clamp(p.x, -maxX, maxX);
       p.z = clamp(p.z, -maxZ, maxZ);
@@ -1056,32 +1079,49 @@ export class MatchEngine {
     const owner = this._getPlayer(this.ball.ownerId);
 
     if (owner) {
-      // Smooth magnetic dribble right at the player's boots
-      const dribbleDist = 0.98;
+      // Smooth magnetic dribble right at the player's boots (or held safely by GK)
+      const dribbleDist = owner.isGK ? 0.65 : 0.98;
       const targetX = owner.x + Math.cos(owner.facing) * dribbleDist;
       const targetZ = owner.z + Math.sin(owner.facing) * dribbleDist;
       this.ball.x += (targetX - this.ball.x) * Math.min(1, dt * 22);
       this.ball.z += (targetZ - this.ball.z) * Math.min(1, dt * 22);
-      this.ball.y = PITCH.ballRadius;
+      this.ball.y = owner.isGK ? 1.35 : PITCH.ballRadius;
       this.ball.vx = owner.vx;
       this.ball.vz = owner.vz;
       this.ball.vy = 0;
       this.ball.spinX = owner.vz * 2.1;
       this.ball.spinZ = -owner.vx * 2.1;
 
-      // Check if an opponent steals cleanly on contact (unless owner is spinning!)
+      // Walking the ball directly into the goal scores immediately!
+      if (!owner.isGK && Math.abs(this.ball.z) < PITCH.goalHalfWidth - PITCH.ballRadius * 0.25) {
+        if (this.ball.x >= PITCH.halfLength + PITCH.ballRadius * 0.2) {
+          this._registerGoal('home');
+          return;
+        }
+        if (this.ball.x <= -PITCH.halfLength - PITCH.ballRadius * 0.2) {
+          this._registerGoal('away');
+          return;
+        }
+      }
+
+      // Check if an opponent (including the goalkeeper!) steals/catches cleanly on contact
       if (owner.skillTimer <= 0 && !owner.isGK) {
         for (const opp of this.players) {
           if (opp.team === owner.team || opp.kickCooldown > 0 || opp.stunTimer > 0) continue;
           const d = hypot2(this.ball.x - opp.x, this.ball.z - opp.z);
-          const stealRadius = opp.humanSlotId ? 1.72 : 1.38;
+          const stealRadius = opp.isGK ? 2.1 : opp.humanSlotId ? 1.72 : 1.38;
           if (d < stealRadius) {
             owner.kickCooldown = 0.5;
             owner.stunTimer = 0.35;
             this.ball.ownerId = opp.id;
             this.ball.lastTouchId = opp.id;
             this.ball.lastTouchTeam = opp.team;
-            this._emit('tackle', { x: opp.x, z: opp.z });
+            if (opp.isGK) {
+              opp.kickCooldown = 0.65; // Keeper grabs it cleanly, then kicks it back upfield!
+              this._emit('save', { x: opp.x, z: opp.z, playerId: opp.id });
+            } else {
+              this._emit('tackle', { x: opp.x, z: opp.z });
+            }
             break;
           }
         }
