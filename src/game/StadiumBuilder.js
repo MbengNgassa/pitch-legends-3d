@@ -36,9 +36,14 @@ export class StadiumBuilder {
     this._buildPitch();
     this._buildGoals();
     this._buildCornerFlags();
-    this._buildLedBoards();
-    this._buildStandsAndRoof();
-    this._buildInstancedCrowd();
+    if (this.stadium.style === 'cage') {
+      this._buildCageReboundWalls();
+      this._buildNightCitySkyline();
+    } else {
+      this._buildLedBoards();
+      this._buildStandsAndRoof();
+      this._buildInstancedCrowd();
+    }
     this._buildFloodlights();
 
     // Check if user dropped a Blender stadium GLB into public/models/manifest.json
@@ -296,6 +301,191 @@ export class StadiumBuilder {
     west.position.set(-(PITCH.halfLength + 6.4), boardH / 2, 0);
 
     this.group.add(north, south, east, west);
+  }
+
+  /**
+   * Builds authentic 5-a-side rebound walls hugging the exact touchlines & goal lines
+   * (with clean openings at both goal mouths), glowing neon rails, and semi-transparent cage fencing!
+   */
+  _buildCageReboundWalls() {
+    this.ledNormalTex = createLedBoardTexture(this.homeClub, this.awayClub, this.stadium, false);
+    this.ledGoalTex = createLedBoardTexture(this.homeClub, this.awayClub, this.stadium, true);
+
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: this.stadium.wallColor || '#0F172A',
+      roughness: 0.45,
+      metalness: 0.35,
+    });
+    const ledMat = new THREE.MeshStandardMaterial({
+      map: this.ledNormalTex,
+      emissive: new THREE.Color('#FFFFFF'),
+      emissiveMap: this.ledNormalTex,
+      emissiveIntensity: 0.85,
+      roughness: 0.25,
+    });
+    this.ledMaterials.push(ledMat);
+
+    const railMat = new THREE.MeshBasicMaterial({
+      color: this.stadium.railColor || '#22C55E',
+    });
+    const fenceMat = new THREE.MeshBasicMaterial({
+      color: '#94A3B8',
+      wireframe: true,
+      transparent: true,
+      opacity: 0.26,
+      side: THREE.DoubleSide,
+    });
+    const postMat = new THREE.MeshStandardMaterial({
+      color: '#475569',
+      metalness: 0.7,
+      roughness: 0.35,
+    });
+
+    const boardH = 2.0;
+    const fenceH = 5.4;
+
+    // 1. Far North rebound wall (full length with glowing LED face + tall cage mesh)
+    const northBoard = new THREE.Mesh(new THREE.BoxGeometry(PITCH.length + 0.6, boardH, 0.5), ledMat);
+    northBoard.position.set(0, boardH / 2, -(PITCH.halfWidth + 0.25));
+    northBoard.receiveShadow = true;
+    const northRail = new THREE.Mesh(new THREE.BoxGeometry(PITCH.length + 0.8, 0.22, 0.6), railMat);
+    northRail.position.set(0, boardH + 0.11, -(PITCH.halfWidth + 0.25));
+    const northFence = new THREE.Mesh(new THREE.PlaneGeometry(PITCH.length, fenceH, 36, 6), fenceMat);
+    northFence.position.set(0, boardH + fenceH / 2, -(PITCH.halfWidth + 0.25));
+    this.group.add(northBoard, northRail, northFence);
+
+    // 2. Near South low rebound wall (kept low & sleek so broadcast camera ALWAYS has an unobstructed pitch view!)
+    const southH = 1.15;
+    const southBoard = new THREE.Mesh(new THREE.BoxGeometry(PITCH.length + 0.6, southH, 0.45), wallMat);
+    southBoard.position.set(0, southH / 2, PITCH.halfWidth + 0.25);
+    const southRail = new THREE.Mesh(new THREE.BoxGeometry(PITCH.length + 0.8, 0.18, 0.52), railMat);
+    southRail.position.set(0, southH + 0.09, PITCH.halfWidth + 0.25);
+    this.group.add(southBoard, southRail);
+
+    // 3. East & West end rebound walls flanking each goal mouth cleanly!
+    const wingLen = PITCH.halfWidth - PITCH.goalHalfWidth;
+    const wingCenterZ = PITCH.goalHalfWidth + wingLen / 2;
+    [-1, 1].forEach((sideX) => {
+      const wx = sideX * (PITCH.halfLength + 0.25);
+      [-1, 1].forEach((sideZ) => {
+        const wz = sideZ * wingCenterZ;
+        const board = new THREE.Mesh(new THREE.BoxGeometry(0.5, boardH, wingLen), wallMat);
+        board.position.set(wx, boardH / 2, wz);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.22, wingLen + 0.2), railMat);
+        rail.position.set(wx, boardH + 0.11, wz);
+        const fence = new THREE.Mesh(new THREE.PlaneGeometry(wingLen, fenceH, 12, 6), fenceMat);
+        fence.rotation.y = Math.PI / 2;
+        fence.position.set(wx, boardH + fenceH / 2, wz);
+        this.group.add(board, rail, fence);
+      });
+
+      // Overhead cage banner above goal crossbar
+      const overFence = new THREE.Mesh(new THREE.PlaneGeometry(PITCH.goalWidth, 3.2, 10, 4), fenceMat);
+      overFence.rotation.y = Math.PI / 2;
+      overFence.position.set(wx, PITCH.goalHeight + 1.6, 0);
+      this.group.add(overFence);
+    });
+
+    // Vertical cage support stanchions along North & East/West walls
+    const poleGeo = new THREE.CylinderGeometry(0.14, 0.16, boardH + fenceH + 0.4, 8);
+    for (let x = -PITCH.halfLength; x <= PITCH.halfLength + 0.1; x += 14) {
+      const p = new THREE.Mesh(poleGeo, postMat);
+      p.position.set(x, (boardH + fenceH) / 2, -(PITCH.halfWidth + 0.35));
+      this.group.add(p);
+    }
+  }
+
+  /**
+   * Builds an atmospheric nighttime urban skyline with glowing lit windows & street spectator gallery!
+   */
+  _buildNightCitySkyline() {
+    const bldgMat = new THREE.MeshStandardMaterial({
+      color: '#0D1522',
+      roughness: 0.85,
+      metalness: 0.15,
+    });
+    const glowColor = this.stadium.cityGlow || '#FACC15';
+    const winWarm = new THREE.MeshBasicMaterial({ color: glowColor });
+    const winCool = new THREE.MeshBasicMaterial({ color: '#E0F2FE' });
+
+    // Dark paved urban street apron around the cage
+    const asphalt = new THREE.Mesh(
+      new THREE.PlaneGeometry(320, 240),
+      new THREE.MeshStandardMaterial({ color: '#111827', roughness: 0.92 })
+    );
+    asphalt.rotation.x = -Math.PI / 2;
+    asphalt.position.y = -0.08;
+    this.group.add(asphalt);
+
+    // Ring of stylized nighttime city towers in the background (North, East, West)
+    const buildings = [];
+    for (let i = -8; i <= 8; i++) {
+      buildings.push({ x: i * 16 + (i % 2) * 3, z: -(PITCH.halfWidth + 24 + (Math.abs(i) % 3) * 10), w: 11 + (Math.abs(i) % 3) * 3, h: 22 + ((i * 7 + 40) % 34), d: 12 });
+    }
+    for (let i = -3; i <= 3; i++) {
+      buildings.push({ x: PITCH.halfLength + 26 + (Math.abs(i) % 2) * 8, z: i * 18, w: 12, h: 20 + ((i * 11 + 30) % 28), d: 13 });
+      buildings.push({ x: -(PITCH.halfLength + 26 + (Math.abs(i) % 2) * 8), z: i * 18, w: 12, h: 20 + ((i * 9 + 25) % 30), d: 13 });
+    }
+
+    buildings.forEach((b, idx) => {
+      const box = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), bldgMat);
+      box.position.set(b.x, b.h / 2, b.z);
+      this.group.add(box);
+
+      // Lit rooftop neon stripe on every 3rd building
+      if (idx % 3 === 0) {
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.3, 0.5, b.d + 0.3), winWarm);
+        cap.position.set(b.x, b.h + 0.25, b.z);
+        this.group.add(cap);
+      }
+
+      // Glowing window strips facing the pitch
+      const floors = Math.floor(b.h / 5);
+      for (let f = 1; f < floors; f++) {
+        if ((f + idx) % 2 === 0) continue;
+        const win = new THREE.Mesh(
+          new THREE.PlaneGeometry(b.w * 0.68, 1.3),
+          (f + idx) % 3 === 0 ? winCool : winWarm
+        );
+        win.position.set(b.x, f * 4.5, b.z + b.d / 2 + 0.08);
+        if (b.z > -PITCH.halfWidth) {
+          win.position.set(b.x + (b.x > 0 ? -b.w / 2 - 0.08 : b.w / 2 + 0.08), f * 4.5, b.z);
+          win.rotation.y = b.x > 0 ? -Math.PI / 2 : Math.PI / 2;
+        }
+        this.group.add(win);
+      }
+    });
+
+    // Small lively street crowd cheering right behind the North cage fence!
+    const placements = [];
+    const cols = 42;
+    for (let c = 0; c < cols; c++) {
+      if (Math.random() < 0.18) continue;
+      placements.push({
+        x: -PITCH.halfLength + 3 + c * (PITCH.length / cols),
+        y: 1.2,
+        z: -(PITCH.halfWidth + 3.2 + (c % 2) * 1.4),
+        phase: Math.random() * Math.PI * 2,
+        color: this.stadium.crowdPalette[c % this.stadium.crowdPalette.length],
+      });
+    }
+    const specGeo = new THREE.CapsuleGeometry(0.38, 0.72, 4, 6);
+    const specMat = new THREE.MeshStandardMaterial({ roughness: 0.7 });
+    const inst = new THREE.InstancedMesh(specGeo, specMat, placements.length);
+    const col = new THREE.Color();
+    placements.forEach((p, i) => {
+      this.crowdDummy.position.set(p.x, p.y, p.z);
+      this.crowdDummy.scale.set(1, 1, 1);
+      this.crowdDummy.updateMatrix();
+      inst.setMatrixAt(i, this.crowdDummy.matrix);
+      col.set(p.color);
+      inst.setColorAt(i, col);
+    });
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    this.crowdMesh = inst;
+    this.crowdData = placements;
+    this.group.add(inst);
   }
 
   _buildStandsAndRoof() {

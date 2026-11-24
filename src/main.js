@@ -345,7 +345,12 @@ class PitchLegendsApp {
       else if (ev.type === 'supershot') soundEngine.playSuperShot();
       else if (ev.type === 'pass') soundEngine.playPass();
       else if (ev.type === 'tackle') soundEngine.playTackle();
-      else if (ev.type === 'skill') soundEngine.playSkill();
+      else if (ev.type === 'skill') {
+        soundEngine.playSkill();
+        if (ev.skillLabel) {
+          this.hud.showSkillCallout(ev.skillLabel, ev.color);
+        }
+      } else if (ev.type === 'wall') soundEngine.playPass();
       else if (ev.type === 'post') soundEngine.playPost();
       else if (ev.type === 'save') soundEngine.playSave();
       else if (ev.type === 'whistle') soundEngine.playWhistle(ev.kind);

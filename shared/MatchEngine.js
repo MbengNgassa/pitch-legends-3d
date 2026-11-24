@@ -51,6 +51,14 @@ export const DIFFICULTIES = {
 
 export const HUMAN_COLORS = ['#38BDF8', '#22C55E', '#FB923C'];
 
+export const SKILL_MOVES = {
+  roulette: { id: 'roulette', label: '360° ROULETTE', duration: 0.56, color: '#38BDF8' },
+  rainbow: { id: 'rainbow', label: 'RAINBOW FLICK', duration: 0.64, color: '#FACC15' },
+  elastico: { id: 'elastico', label: 'ELASTICO', duration: 0.5, color: '#22C55E' },
+  stepover: { id: 'stepover', label: 'STEP-OVER', duration: 0.52, color: '#F97316' },
+  heelchop: { id: 'heelchop', label: 'CR7 CHOP', duration: 0.48, color: '#FB7185' },
+};
+
 // 5-a-side base formations spread across the spacious 126x78 pitch (home attacks +X)
 const HOME_FORMATION = [
   { x: -59.0, z: 0 },      // 0: GK
@@ -197,6 +205,10 @@ export class MatchEngine {
           kickCooldown: 0,
           stunTimer: 0,
           skillTimer: 0,
+          skillType: '',
+          skillDuration: 0.55,
+          skillDir: 1,
+          lastSkillType: '',
           diveTimer: 0,
           diveDir: 0,
           celebrateTimer: 0,
@@ -253,6 +265,7 @@ export class MatchEngine {
       p.kickCooldown = 0;
       p.stunTimer = 0;
       p.skillTimer = 0;
+      p.skillType = '';
       p.diveTimer = 0;
       p.celebrateTimer = 0;
       p.shotCharge = 0;
@@ -507,22 +520,73 @@ export class MatchEngine {
 
     let speed = p.speedBase * (sprinting ? 1.32 : 1.0);
     if (hasBall) speed *= 0.94 + (p.data.dri / 100) * 0.08;
-    if (p.skillTimer > 0) speed *= 1.24;
     if (p.stunTimer > 0) speed *= 0.4;
 
-    p.vx = moveX * speed;
-    p.vz = moveZ * speed;
+    if (p.skillTimer > 0) {
+      const dur = p.skillDuration || 0.55;
+      const prog = clamp(1 - p.skillTimer / dur, 0, 1);
+      const fwdX = finalMag > 0.12 ? moveX : Math.cos(p.facing);
+      const fwdZ = finalMag > 0.12 ? moveZ : Math.sin(p.facing);
+      // Perpendicular right vector relative to facing/movement
+      const rightX = -fwdZ;
+      const rightZ = fwdX;
+      const sDir = p.skillDir || 1;
+
+      let fwdMul = 1.25;
+      let latMul = 0;
+
+      if (p.skillType === 'rainbow') {
+        // Quick heel flick then burst forward under the arcing ball
+        fwdMul = prog < 0.25 ? 1.08 : 1.34;
+        latMul = Math.sin(prog * Math.PI) * 0.12 * sDir;
+      } else if (p.skillType === 'elastico') {
+        // Crisp flip-flap: feint one way, whip sharply past the defender the other way!
+        fwdMul = prog < 0.38 ? 1.05 : 1.34;
+        latMul = prog < 0.38 ? -0.42 * sDir : 0.62 * sDir;
+      } else if (p.skillType === 'stepover') {
+        // Quick double-feint then explosive diagonal acceleration
+        fwdMul = prog < 0.42 ? 0.92 : 1.42;
+        latMul = prog < 0.42 ? Math.sin(prog * Math.PI * 4) * 0.24 : 0.42 * sDir;
+      } else if (p.skillType === 'heelchop') {
+        // Sharp CR7 chop cut diagonally inside / away from defender
+        fwdMul = prog < 0.22 ? 0.86 : 1.24;
+        latMul = prog < 0.2 ? 0 : 0.68 * sDir;
+      } else {
+        // 360° Roulette: tight silky spin glide curving past the marker
+        fwdMul = 1.26;
+        latMul = Math.sin(prog * Math.PI) * 0.34 * sDir;
+      }
+
+      p.vx = (fwdX * fwdMul + rightX * latMul) * speed;
+      p.vz = (fwdZ * fwdMul + rightZ * latMul) * speed;
+    } else {
+      p.vx = moveX * speed;
+      p.vz = moveZ * speed;
+    }
 
     // Build Super Meter gradually while dribbling!
     if (hasBall && finalMag > 0.2) {
       p.superMeter = Math.min(100, p.superMeter + dt * 11);
     }
 
-    // Skill Spin Move!
+    // Dynamic Situational Skill Move! (Picks best trick for situation + varies moves)
     if (skillJustPressed && p.skillTimer <= 0 && p.stunTimer <= 0) {
-      p.skillTimer = 0.55;
+      const picked = this._pickSkillMove(p, moveX, moveZ, hasBall);
+      p.skillType = picked.move.id;
+      p.skillDuration = picked.move.duration;
+      p.skillTimer = picked.move.duration;
+      p.skillDir = picked.dir;
+      p.lastSkillType = picked.move.id;
       p.superMeter = Math.min(100, p.superMeter + 14);
-      this._emit('skill', { x: p.x, z: p.z, playerId: p.id });
+      this._emit('skill', {
+        x: p.x,
+        z: p.z,
+        playerId: p.id,
+        humanSlotId: human.slotId,
+        skillType: picked.move.id,
+        skillLabel: picked.move.label,
+        color: picked.move.color,
+      });
     }
 
     // Actions WITH ball: Pass or Charge/Fire Shot
@@ -567,6 +631,113 @@ export class MatchEngine {
     inp._prevShoot = inp.shoot;
     inp._prevPass = inp.pass;
     inp._prevSkill = inp.skill;
+  }
+
+  _pickSkillMove(p, moveX, moveZ, hasBall) {
+    const fwdX = Math.hypot(moveX, moveZ) > 0.15 ? moveX : Math.cos(p.facing);
+    const fwdZ = Math.hypot(moveX, moveZ) > 0.15 ? moveZ : Math.sin(p.facing);
+    const rightX = -fwdZ;
+    const rightZ = fwdX;
+
+    // Inspect nearest opponent to pick the smartest trick for this exact moment
+    let nearestOpp = null;
+    let nearestDist = Infinity;
+    let oppDot = 0;
+    let oppSide = 0;
+
+    for (const opp of this.players) {
+      if (opp.team === p.team) continue;
+      const dx = opp.x - p.x;
+      const dz = opp.z - p.z;
+      const d = Math.hypot(dx, dz);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearestOpp = opp;
+        oppDot = d > 0.01 ? (dx / d) * fwdX + (dz / d) * fwdZ : 0;
+        oppSide = d > 0.01 ? (dx / d) * rightX + (dz / d) * rightZ : 0;
+      }
+    }
+
+    const nearSideline = Math.abs(p.z) > PITCH.halfWidth * 0.48;
+    const attackDir = p.team === 'home' ? 1 : -1;
+    const inAttackingHalf = p.x * attackDir > 0;
+
+    // Choose optimal dodge side: cut inward away from sideline, or away from nearest defender!
+    let dir = Math.random() < 0.5 ? 1 : -1;
+    if (nearSideline) {
+      // Point toward pitch center (z = 0)
+      const toCenterZ = -Math.sign(p.z);
+      dir = rightZ * toCenterZ >= 0 ? 1 : -1;
+    } else if (nearestOpp && nearestDist < 12 && Math.abs(oppSide) > 0.12) {
+      dir = oppSide > 0 ? -1 : 1;
+    }
+
+    // Build situational weighted candidate pool
+    let weights;
+    if (!hasBall) {
+      // Off-ball feint/juke burst
+      weights = [
+        { id: 'stepover', w: 45 },
+        { id: 'roulette', w: 35 },
+        { id: 'heelchop', w: 20 },
+      ];
+    } else if (nearestOpp && nearestDist < 10.5 && oppDot > 0.52) {
+      // Defender directly blocking our lane → Rainbow Flick over them, Roulette around, or Elastico!
+      weights = [
+        { id: 'rainbow', w: 42 },
+        { id: 'elastico', w: 32 },
+        { id: 'roulette', w: 26 },
+      ];
+    } else if (nearSideline) {
+      // Cutting in from the wing → CR7 Heel Chop or Elastico!
+      weights = [
+        { id: 'heelchop', w: 46 },
+        { id: 'elastico', w: 30 },
+        { id: 'stepover', w: 24 },
+      ];
+    } else if (nearestOpp && nearestDist < 7.8) {
+      // Tight close pressure from side/behind → 360° Roulette or CR7 Chop!
+      weights = [
+        { id: 'roulette', w: 42 },
+        { id: 'heelchop', w: 32 },
+        { id: 'elastico', w: 26 },
+      ];
+    } else if (inAttackingHalf) {
+      // Open attacking space / 1v1 approach → exciting full showcase mix!
+      weights = [
+        { id: 'stepover', w: 30 },
+        { id: 'rainbow', w: 26 },
+        { id: 'elastico', w: 24 },
+        { id: 'roulette', w: 20 },
+      ];
+    } else {
+      // Midfield / build-up space
+      weights = [
+        { id: 'stepover', w: 32 },
+        { id: 'roulette', w: 28 },
+        { id: 'elastico', w: 24 },
+        { id: 'heelchop', w: 16 },
+      ];
+    }
+
+    // Prevent repeating the exact same skill back-to-back so combos feel fresh!
+    const filtered = weights.filter((item) => item.id !== p.lastSkillType);
+    const pool = filtered.length > 0 ? filtered : weights;
+    const totalW = pool.reduce((sum, item) => sum + item.w, 0);
+    let r = Math.random() * totalW;
+    let chosenId = pool[0].id;
+    for (const item of pool) {
+      r -= item.w;
+      if (r <= 0) {
+        chosenId = item.id;
+        break;
+      }
+    }
+
+    return {
+      move: SKILL_MOVES[chosenId] || SKILL_MOVES.roulette,
+      dir,
+    };
   }
 
   _findBestSwitchCandidate(human) {
@@ -1079,13 +1250,53 @@ export class MatchEngine {
     const owner = this._getPlayer(this.ball.ownerId);
 
     if (owner) {
-      // Smooth magnetic dribble right at the player's boots (or held safely by GK)
-      const dribbleDist = owner.isGK ? 0.65 : 0.98;
-      const targetX = owner.x + Math.cos(owner.facing) * dribbleDist;
-      const targetZ = owner.z + Math.sin(owner.facing) * dribbleDist;
-      this.ball.x += (targetX - this.ball.x) * Math.min(1, dt * 22);
-      this.ball.z += (targetZ - this.ball.z) * Math.min(1, dt * 22);
-      this.ball.y = owner.isGK ? 1.35 : PITCH.ballRadius;
+      // Smooth magnetic dribble right at the player's boots, tailored to each Skill Move!
+      const fwdX = Math.cos(owner.facing);
+      const fwdZ = Math.sin(owner.facing);
+      const rightX = -fwdZ;
+      const rightZ = fwdX;
+
+      let dribbleFwd = owner.isGK ? 0.65 : 0.98;
+      let dribbleSide = 0;
+      let skillHop = 0;
+
+      if (!owner.isGK && owner.skillTimer > 0) {
+        const dur = owner.skillDuration || 0.55;
+        const prog = clamp(1 - owner.skillTimer / dur, 0, 1);
+        const sDir = owner.skillDir || 1;
+
+        if (owner.skillType === 'rainbow') {
+          // Iconic Rainbow Flick: heel-lift from behind up and over the head to land in front!
+          dribbleFwd = -0.35 + prog * 1.95;
+          skillHop = Math.sin(prog * Math.PI) * 2.15;
+        } else if (owner.skillType === 'elastico') {
+          // Ronaldinho Flip-Flap: quick outside push then snappy inside whip!
+          dribbleFwd = 1.05;
+          dribbleSide = (prog < 0.4 ? -Math.sin((prog / 0.4) * Math.PI) * 0.95 : Math.sin(((prog - 0.4) / 0.6) * Math.PI) * 1.1) * sDir;
+          skillHop = Math.sin(prog * Math.PI) * 0.16;
+        } else if (owner.skillType === 'stepover') {
+          // Double Step-Over: ball stays close low on turf while boots dance around it, then bursts ahead
+          dribbleFwd = prog < 0.45 ? 0.92 : 1.18;
+          dribbleSide = prog < 0.45 ? Math.sin(prog * Math.PI * 4) * 0.25 : 0.45 * sDir;
+        } else if (owner.skillType === 'heelchop') {
+          // CR7 Chop: crisp diagonal cut behind the standing leg!
+          dribbleFwd = prog < 0.3 ? 0.72 : 1.08;
+          dribbleSide = Math.sin(prog * Math.PI) * 0.95 * sDir;
+          skillHop = Math.sin(prog * Math.PI) * 0.22;
+        } else {
+          // 360° Roulette: ball glides in a tight orbit right under the turning boots
+          const orb = prog * Math.PI * 2 * sDir;
+          dribbleFwd = 0.78 + Math.cos(orb) * 0.28;
+          dribbleSide = Math.sin(orb) * 0.48;
+          skillHop = Math.sin(prog * Math.PI) * 0.2;
+        }
+      }
+
+      const targetX = owner.x + fwdX * dribbleFwd + rightX * dribbleSide;
+      const targetZ = owner.z + fwdZ * dribbleFwd + rightZ * dribbleSide;
+      this.ball.x += (targetX - this.ball.x) * Math.min(1, dt * 24);
+      this.ball.z += (targetZ - this.ball.z) * Math.min(1, dt * 24);
+      this.ball.y = owner.isGK ? 1.35 : PITCH.ballRadius + skillHop;
       this.ball.vx = owner.vx;
       this.ball.vz = owner.vz;
       this.ball.vy = 0;
@@ -1200,23 +1411,32 @@ export class MatchEngine {
       }
     }
 
-    // Cushioned arcade touchline & endline rebound (keeps gameplay fast & continuous for kids!)
+    // Cushioned 5-a-side wall / touchline rebound (fast continuous banking action!)
+    let bouncedWall = false;
+    const impactSpeed = Math.hypot(this.ball.vx, this.ball.vz);
     if (this.ball.z > PITCH.halfWidth - PITCH.ballRadius) {
       this.ball.z = PITCH.halfWidth - PITCH.ballRadius;
-      this.ball.vz = -Math.abs(this.ball.vz) * 0.74;
+      this.ball.vz = -Math.abs(this.ball.vz) * 0.78;
+      bouncedWall = true;
     } else if (this.ball.z < -PITCH.halfWidth + PITCH.ballRadius) {
       this.ball.z = -PITCH.halfWidth + PITCH.ballRadius;
-      this.ball.vz = Math.abs(this.ball.vz) * 0.74;
+      this.ball.vz = Math.abs(this.ball.vz) * 0.78;
+      bouncedWall = true;
     }
 
     if (!inGoalMouthZ || !inGoalMouthY) {
       if (this.ball.x > PITCH.halfLength - PITCH.ballRadius) {
         this.ball.x = PITCH.halfLength - PITCH.ballRadius;
-        this.ball.vx = -Math.abs(this.ball.vx) * 0.74;
+        this.ball.vx = -Math.abs(this.ball.vx) * 0.78;
+        bouncedWall = true;
       } else if (this.ball.x < -PITCH.halfLength + PITCH.ballRadius) {
         this.ball.x = -PITCH.halfLength + PITCH.ballRadius;
-        this.ball.vx = Math.abs(this.ball.vx) * 0.74;
+        this.ball.vx = Math.abs(this.ball.vx) * 0.78;
+        bouncedWall = true;
       }
+    }
+    if (bouncedWall && impactSpeed > 8.5) {
+      this._emit('wall', { x: this.ball.x, y: this.ball.y, z: this.ball.z });
     }
 
     // Check player ball pickup / goalkeeper save
@@ -1345,6 +1565,9 @@ export class MatchEngine {
         stamina: Number(p.stamina.toFixed(2)),
         superMeter: Math.round(p.superMeter),
         skillTimer: Number(p.skillTimer.toFixed(2)),
+        skillType: p.skillTimer > 0 ? p.skillType : '',
+        skillDuration: p.skillDuration || 0.55,
+        skillDir: p.skillDir || 1,
         diveTimer: Number(p.diveTimer.toFixed(2)),
         diveDir: p.diveDir,
         shotCharge: Number(p.shotCharge.toFixed(2)),

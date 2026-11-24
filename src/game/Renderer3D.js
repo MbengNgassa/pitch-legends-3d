@@ -242,7 +242,10 @@ export class Renderer3D {
         this.shakeAmount = Math.max(this.shakeAmount, 0.16);
         this._spawnBurst(ev.x, 0.4, ev.z, '#4ADE80', 7, 4.5);
       } else if (ev.type === 'skill') {
-        this._spawnBurst(ev.x, 1.1, ev.z, '#38BDF8', 14, 6);
+        this._spawnBurst(ev.x, 1.0, ev.z, ev.color || '#38BDF8', 14, 6.2);
+      } else if (ev.type === 'wall') {
+        const sparkColor = this.stadiumData?.railColor || this.stadiumData?.ledColor || '#38BDF8';
+        this._spawnBurst(ev.x, Math.max(0.5, ev.y || 0.6), ev.z, sparkColor, 10, 5.5);
       } else if (ev.type === 'post') {
         this.shakeAmount = 0.45;
         this._spawnBurst(ev.x, 2.2, ev.z, '#FFFFFF', 14, 7);

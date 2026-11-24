@@ -75,6 +75,7 @@ export class HudOverlay {
         </div>
 
         <div class="kickoff-pill hidden" id="hud-kickoff-pill">KICK OFF!</div>
+        <div class="skill-callout-pill hidden" id="hud-skill-pill">360° ROULETTE!</div>
 
         <!-- Bottom Player Status Bar + Desktop Controls Legend -->
         <div class="hud-bottom">
@@ -101,7 +102,7 @@ export class HudOverlay {
             <span><kbd>Space</kbd> / <kbd>J</kbd> Pass &amp; Switch</span>
             <span><kbd>K</kbd> / <kbd>Shift</kbd> Hold Shoot</span>
             <span><kbd>E</kbd> / <kbd>L</kbd> Sprint</span>
-            <span><kbd>Q</kbd> Skill Spin</span>
+            <span><kbd>Q</kbd> Skill Move</span>
           </div>
         </div>
 
@@ -122,10 +123,33 @@ export class HudOverlay {
             </div>
           </div>
           <div class="touch-buttons-pad">
-            <button class="touch-btn skill" data-action="skill">SKILL</button>
-            <button class="touch-btn shoot" data-action="shoot">SHOOT</button>
-            <button class="touch-btn pass" data-action="pass">PASS</button>
-            <button class="touch-btn sprint" data-action="sprint">SPRINT</button>
+            <button class="touch-btn skill" data-action="skill" aria-label="Skill Move">
+              <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3l2.2 5.4L20 10.6l-4.5 3.7 1.4 5.7L12 17l-4.9 3 1.4-5.7L4 10.6l5.8-2.2z"/>
+              </svg>
+              <span class="tb-label">SKILL</span>
+            </button>
+            <button class="touch-btn shoot" data-action="shoot" aria-label="Shoot">
+              <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="8"/>
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+              </svg>
+              <span class="tb-label">SHOOT</span>
+            </button>
+            <button class="touch-btn pass" data-action="pass" aria-label="Pass or Switch">
+              <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 12h14"/>
+                <path d="M13 6l6 6-6 6"/>
+              </svg>
+              <span class="tb-label">PASS</span>
+            </button>
+            <button class="touch-btn sprint" data-action="sprint" aria-label="Sprint">
+              <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M13 2L4 14h7l-1 8 10-12h-7l0-8z"/>
+              </svg>
+              <span class="tb-label">SPRINT</span>
+            </button>
           </div>
         </div>
 
@@ -136,6 +160,7 @@ export class HudOverlay {
 
     this.radarCanvas = this.root.querySelector('#hud-radar-canvas');
     this.radarCtx = this.radarCanvas ? this.radarCanvas.getContext('2d') : null;
+    this._skillPillTimer = null;
     this._bindEvents();
   }
 
@@ -212,12 +237,16 @@ export class HudOverlay {
       joyZone.addEventListener('pointercancel', resetStick);
     }
 
-    // Touch Action Buttons
+    // Touch Action Buttons (latch quick taps on pass/skill so rapid thumb taps never drop between frames!)
+    this._tapLatch = { pass: false, skill: false };
     this.root.querySelectorAll('.touch-btn').forEach((btn) => {
       const action = btn.dataset.action;
       const press = (e) => {
         e.preventDefault();
         this.touchState[action] = true;
+        if (action === 'pass' || action === 'skill') {
+          this._tapLatch[action] = true;
+        }
         btn.classList.add('pressed');
       };
       const release = (e) => {
@@ -233,7 +262,16 @@ export class HudOverlay {
   }
 
   getTouchInput() {
-    return this.touchState;
+    const out = {
+      ...this.touchState,
+      pass: this.touchState.pass || Boolean(this._tapLatch?.pass),
+      skill: this.touchState.skill || Boolean(this._tapLatch?.skill),
+    };
+    if (this._tapLatch) {
+      this._tapLatch.pass = false;
+      this._tapLatch.skill = false;
+    }
+    return out;
   }
 
   update(snapshot, localSlotId, rewardsData = null) {
@@ -424,7 +462,26 @@ export class HudOverlay {
     });
   }
 
+  showSkillCallout(label, color = '#38BDF8') {
+    const pill = this.root.querySelector('#hud-skill-pill');
+    if (!pill || !label) return;
+    pill.textContent = `${label}!`;
+    pill.style.borderColor = color;
+    pill.style.color = color;
+    pill.classList.remove('hidden');
+    pill.classList.remove('pop');
+    // Force reflow so rapid consecutive tricks replay the crisp pop animation
+    void pill.offsetWidth;
+    pill.classList.add('pop');
+    if (this._skillPillTimer) clearTimeout(this._skillPillTimer);
+    this._skillPillTimer = setTimeout(() => {
+      pill.classList.add('hidden');
+      pill.classList.remove('pop');
+    }, 950);
+  }
+
   unmount() {
+    if (this._skillPillTimer) clearTimeout(this._skillPillTimer);
     this.root.innerHTML = '';
   }
 }

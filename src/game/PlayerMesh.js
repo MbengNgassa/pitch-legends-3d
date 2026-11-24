@@ -354,6 +354,20 @@ export class PlayerMesh {
     this.superRing.position.y = 0.06;
     this.superRing.visible = false;
     this.group.add(this.superRing);
+
+    // Smooth Skill Roulette Footwork Ring
+    this.skillRingMat = new THREE.MeshBasicMaterial({
+      color: '#38BDF8',
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.skillRing = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.52, 28), this.skillRingMat);
+    this.skillRing.rotation.x = -Math.PI / 2;
+    this.skillRing.position.y = 0.08;
+    this.skillRing.visible = false;
+    this.group.add(this.skillRing);
   }
 
   _buildNameplate() {
@@ -372,18 +386,35 @@ export class PlayerMesh {
     this.group.position.z += (state.z - this.group.position.z) * lerpFactor;
     this.bodyRoot.position.y += ((state.y || 0) - this.bodyRoot.position.y) * Math.min(1, dt * 18);
 
-    // Rotate player body to face movement/aim direction
-    // MatchEngine uses atan2(z, x): facing=0 is +X, facing=PI/2 is +Z.
-    // In Three.js, rotating around +Y by -facing aligns local +X with (cos(facing), sin(facing)).
+    // Rotate player body cleanly toward movement/aim direction (never corrupted by skill spin!)
     const targetRotY = -state.facing;
     let diff = targetRotY - this.bodyRoot.rotation.y;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     this.bodyRoot.rotation.y += diff * Math.min(1, dt * 18);
 
-    // Skill 360-degree roulette spin!
-    if (state.skillTimer > 0) {
-      this.bodyRoot.rotation.y += (state.skillTimer / 0.55) * Math.PI * 2;
+    // Distinct silky choreography for each of the 5 situational Skill Moves!
+    const skillActive = state.skillTimer > 0;
+    const skillType = state.skillType || 'roulette';
+    const skillDur = state.skillDuration || 0.55;
+    const skillProg = skillActive ? Math.max(0, Math.min(1, 1 - state.skillTimer / skillDur)) : 0;
+    const skillDir = state.skillDir || 1;
+
+    if (skillActive) {
+      this.skillRing.visible = true;
+      const ringColors = {
+        roulette: '#38BDF8',
+        rainbow: '#FACC15',
+        elastico: '#22C55E',
+        stepover: '#F97316',
+        heelchop: '#FB7185',
+      };
+      this.skillRingMat.color.set(ringColors[skillType] || '#38BDF8');
+      const ringScale = 0.88 + skillProg * 0.82;
+      this.skillRing.scale.set(ringScale, ringScale, 1);
+      this.skillRingMat.opacity = (1 - skillProg) * 0.88;
+    } else {
+      this.skillRing.visible = false;
     }
 
     // Ring orientation matches facing
@@ -437,21 +468,104 @@ export class PlayerMesh {
       this.nameSprite.visible = false;
     }
 
-    // Procedural limb animations (running stride, lean, goalkeeper dive)
+    // Procedural limb & skill animations (running stride, lean, goalkeeper dive, 5 skill moves)
     if (!this.hasCustomModel) {
       const speed = Math.hypot(state.vx, state.vz);
       const strideAmp = Math.min(0.85, speed * 0.075);
       const cycle = state.runCycle || 0;
 
+      // Reset lateral/roll offsets cleanly each frame
+      this.proceduralRig.position.z *= 0.72;
+      this.leftLeg.rotation.x *= 0.7;
+      this.rightLeg.rotation.x *= 0.7;
+
       if (state.diveTimer > 0) {
         // Dramatic goalkeeper outstretched dive!
+        this.proceduralRig.rotation.y = 0;
         this.proceduralRig.rotation.x = (state.diveDir || 1) * 1.15;
         this.proceduralRig.position.y = 0.55;
         this.leftArm.rotation.z = 2.4;
         this.rightArm.rotation.z = 2.4;
         this.leftLeg.rotation.z = -0.25;
         this.rightLeg.rotation.z = 0.25;
+      } else if (skillActive) {
+        const sinP = Math.sin(skillProg * Math.PI);
+
+        if (skillType === 'roulette') {
+          // Silky cubic-eased single 360° Marseille Roulette spin
+          const eased =
+            skillProg < 0.5
+              ? 4 * skillProg * skillProg * skillProg
+              : 1 - Math.pow(-2 * skillProg + 2, 3) / 2;
+          this.proceduralRig.rotation.y = eased * Math.PI * 2 * skillDir;
+          this.proceduralRig.rotation.x = sinP * 0.14 * skillDir;
+          this.proceduralRig.position.y = sinP * 0.18;
+          this.torso.rotation.z = -0.22;
+          this.leftLeg.rotation.z = Math.sin(skillProg * Math.PI * 2) * 0.65;
+          this.rightLeg.rotation.z = -Math.sin(skillProg * Math.PI * 2) * 0.65;
+          this.leftArm.rotation.z = 0.45;
+          this.rightArm.rotation.z = -0.45;
+        } else if (skillType === 'rainbow') {
+          // Neymar / Okocha Rainbow Flick: athletic heel-pop lift + sprint burst underneath!
+          const flickPhase = skillProg < 0.4 ? Math.sin((skillProg / 0.4) * Math.PI) : 0;
+          this.proceduralRig.rotation.y = 0;
+          this.proceduralRig.rotation.x = 0;
+          this.proceduralRig.position.y = flickPhase * 0.34 + Math.abs(Math.sin(cycle)) * 0.1;
+          this.torso.rotation.z = -0.18 - flickPhase * 0.28;
+          this.rightLeg.rotation.z = flickPhase > 0.05 ? -flickPhase * 1.25 : -Math.sin(cycle) * strideAmp;
+          this.leftLeg.rotation.z = flickPhase > 0.05 ? flickPhase * 0.45 : Math.sin(cycle) * strideAmp;
+          this.leftArm.rotation.z = flickPhase > 0.05 ? 0.72 : -Math.sin(cycle) * strideAmp * 0.78;
+          this.rightArm.rotation.z = flickPhase > 0.05 ? 0.55 : Math.sin(cycle) * strideAmp * 0.78;
+        } else if (skillType === 'elastico') {
+          // Ronaldinho Flip-Flap: snappy outside feint then explosive inside whip!
+          const whip =
+            skillProg < 0.4
+              ? -Math.sin((skillProg / 0.4) * Math.PI) * 0.3
+              : Math.sin(((skillProg - 0.4) / 0.6) * Math.PI) * 0.38;
+          this.proceduralRig.rotation.y = whip * 0.9 * skillDir;
+          this.proceduralRig.rotation.x = whip * 0.85 * skillDir;
+          this.proceduralRig.position.z = whip * 0.55 * skillDir;
+          this.proceduralRig.position.y = sinP * 0.14;
+          this.torso.rotation.z = -0.26;
+          this.rightLeg.rotation.x = whip * 1.45 * skillDir;
+          this.rightLeg.rotation.z = 0.42 * sinP;
+          this.leftLeg.rotation.z = -0.35 * sinP;
+          this.leftArm.rotation.z = -0.55 * skillDir;
+          this.rightArm.rotation.z = 0.55 * skillDir;
+        } else if (skillType === 'stepover') {
+          // Double Step-Over: rapid alternating scissor feints over the ball then sprint drop!
+          const feintPhase = skillProg < 0.58;
+          const wave = Math.sin(skillProg * Math.PI * 4);
+          this.proceduralRig.rotation.y = feintPhase ? wave * 0.22 : 0.16 * skillDir;
+          this.proceduralRig.rotation.x = feintPhase ? wave * 0.22 : 0.26 * skillDir;
+          this.proceduralRig.position.y = Math.abs(wave) * 0.12;
+          this.torso.rotation.z = -0.28;
+          if (feintPhase) {
+            this.leftLeg.rotation.x = Math.max(0, wave) * -0.78;
+            this.rightLeg.rotation.x = Math.max(0, -wave) * 0.78;
+            this.leftLeg.rotation.z = Math.max(0, wave) * 0.75;
+            this.rightLeg.rotation.z = Math.max(0, -wave) * 0.75;
+          } else {
+            this.leftLeg.rotation.z = Math.sin(cycle) * strideAmp;
+            this.rightLeg.rotation.z = -Math.sin(cycle) * strideAmp;
+          }
+          this.leftArm.rotation.z = -wave * 0.55;
+          this.rightArm.rotation.z = wave * 0.55;
+        } else {
+          // CR7 Heel Chop: sharp planted hop + 45° body cut + back-heel chop!
+          const chopPeak = Math.sin(Math.min(1, skillProg / 0.65) * Math.PI);
+          this.proceduralRig.rotation.y = chopPeak * 0.68 * skillDir;
+          this.proceduralRig.rotation.x = chopPeak * 0.26 * skillDir;
+          this.proceduralRig.position.y = chopPeak * 0.38;
+          this.torso.rotation.z = -0.2;
+          this.rightLeg.rotation.z = -chopPeak * 1.05;
+          this.rightLeg.rotation.x = chopPeak * 0.65 * skillDir;
+          this.leftLeg.rotation.z = chopPeak * 0.42;
+          this.leftArm.rotation.z = 0.65;
+          this.rightArm.rotation.z = -0.65;
+        }
       } else {
+        this.proceduralRig.rotation.y *= 0.72;
         this.proceduralRig.rotation.x *= 0.8;
         this.proceduralRig.position.y = Math.abs(Math.sin(cycle)) * strideAmp * 0.14;
 

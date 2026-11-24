@@ -435,12 +435,16 @@ export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 
             ${STADIUMS.map((s) => {
               const unlocked = profile.unlockedStadiums.includes(s.id);
               const active = setup.stadiumId === s.id;
+              const isCage = s.style === 'cage';
               return `
-                <button class="stadium-chip ${active ? 'selected' : ''} ${unlocked ? '' : 'locked'}"
+                <button class="stadium-chip ${active ? 'selected' : ''} ${unlocked ? '' : 'locked'} ${isCage ? 'cage-chip' : ''}"
                         data-pick-stadium="${s.id}" ${unlocked ? '' : 'data-locked="true"'}>
-                  <div class="st-bar" style="background: linear-gradient(90deg, ${s.skyTop}, ${s.skyHorizon}, ${s.grassA});"></div>
+                  <div class="st-bar" style="background: linear-gradient(90deg, ${s.skyTop}, ${s.railColor || s.skyHorizon}, ${s.grassA});"></div>
+                  <div class="st-chip-top">
+                    <span class="st-style-pill ${isCage ? 'cage' : 'pro'}">${isCage ? '5-a-Side Cage' : 'Pro Stadium'}</span>
+                  </div>
                   <strong>${s.name}</strong>
-                  <span>${unlocked ? s.city : `Unlock · ${s.cost} Coins`}</span>
+                  <span>${unlocked ? `${s.city} · ${s.timeOfDay}` : `Unlock · ${s.cost} Coins`}</span>
                 </button>
               `;
             }).join('')}
@@ -642,11 +646,12 @@ export function renderShopScreen(profile, activeTab = 'myteam', previewStadiumId
             const isUnlocked = profile.unlockedStadiums.includes(s.id);
             const canAfford = profile.coins >= s.cost;
             const isPreviewing = previewStadiumId === s.id;
+            const isCage = s.style === 'cage';
             return `
               <article class="stadium-card ${isPreviewing ? 'previewing' : ''}" data-preview-stadium="${s.id}">
-                <div class="sc-swatch" style="background: linear-gradient(135deg, ${s.skyTop} 0%, ${s.skyHorizon} 52%, ${s.grassA} 52%, ${s.grassB} 100%);">
-                  <span class="sc-time">${s.timeOfDay}</span>
-                  ${s.fireworksOnGoal ? `<span class="sc-fx">Fireworks on Goals!</span>` : ''}
+                <div class="sc-swatch" style="background: linear-gradient(135deg, ${s.skyTop} 0%, ${s.railColor || s.skyHorizon} 52%, ${s.grassA} 52%, ${s.grassB} 100%);">
+                  <span class="sc-time">${isCage ? '5-a-Side Cage' : 'Pro Stadium'} · ${s.timeOfDay}</span>
+                  ${s.fireworksOnGoal ? `<span class="sc-fx">Fireworks!</span>` : ''}
                 </div>
                 <div class="sc-body">
                   <h4>${s.name}</h4>
