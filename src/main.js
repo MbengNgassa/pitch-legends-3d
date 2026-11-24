@@ -6,55 +6,30 @@ import { Renderer3D } from './game/Renderer3D.js';
 import { soundEngine } from './audio/SoundEngine.js';
 import { HudOverlay } from './ui/HudOverlay.js';
 import {
+  loadHouseholdStore,
+  saveHouseholdStore,
+  createNewProfile,
+  buildCustomClubFromProfile,
+  autoPickBestRosterIds,
+  makeShortName,
+} from './state/ProfileStore.js';
+import {
   renderHomeScreen,
+  renderProfilesScreen,
   renderMatchSetupScreen,
   renderShopScreen,
   renderMultiplayerEntry,
   renderMultiplayerLobby,
 } from './ui/Menus.js';
 
-const STORAGE_KEY = 'pitch_legends_3d_profile_v1';
-
-function loadProfile() {
-  const defaults = {
-    coins: 180,
-    unlockedPlayers: [],
-    unlockedStadiums: STADIUMS.filter((s) => s.unlocked).map((s) => s.id),
-    activeDraft: [],
-    playerName: 'Player 1',
-    matchesPlayed: 0,
-  };
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaults;
-    const parsed = JSON.parse(raw);
-    return {
-      ...defaults,
-      ...parsed,
-      unlockedStadiums: Array.from(new Set([...defaults.unlockedStadiums, ...(parsed.unlockedStadiums || [])])),
-      unlockedPlayers: Array.isArray(parsed.unlockedPlayers) ? parsed.unlockedPlayers : [],
-      activeDraft: Array.isArray(parsed.activeDraft) ? parsed.activeDraft : [],
-    };
-  } catch {
-    return defaults;
-  }
-}
-
-function saveProfile(profile) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-  } catch {
-    // Ignore storage quota errors
-  }
-}
-
 class PitchLegendsApp {
   constructor() {
-    this.profile = loadProfile();
-    this.screen = 'home'; // 'home' | 'setup' | 'shop' | 'mp-entry' | 'mp-lobby' | 'match'
+    this.store = loadHouseholdStore();
+    this.screen = 'home'; // 'home' | 'profiles' | 'setup' | 'shop' | 'mp-entry' | 'mp-lobby' | 'match'
     this.setupStep = 1; // 1: Your Team, 2: Opponent, 3: Stadium & Rules
-    this.activeRegion = 'africa';
-    this.shopTab = 'players';
+    this.activeRegion = 'house';
+    this.shopTab = 'myteam';
+    this.builderSlot = 4; // Striker selected by default
     this.previewStadiumId = 'olembe';
     this.deferredInstallPrompt = null;
     this.showInstallModal = false;
@@ -76,8 +51,8 @@ class PitchLegendsApp {
     });
 
     this.setup = {
-      homeClubId: 'cameroon',
-      awayClubId: 'nigeria',
+      homeClubId: `custom_${this.profile.id}`,
+      awayClubId: 'cameroon',
       stadiumId: 'olembe',
       difficulty: 'rookie',
       durationSeconds: 120,
@@ -146,6 +121,25 @@ class PitchLegendsApp {
     }
 
     this._startLoop();
+  }
+
+  get profile() {
+    return this.store.profiles.find((p) => p.id === this.store.activeProfileId) || this.store.profiles[0];
+  }
+
+  _save() {
+    saveHouseholdStore(this.store);
+  }
+
+  _getHouseClubs() {
+    return this.store.profiles.map((p) => buildCustomClubFromProfile(p));
+  }
+
+  _resolveClubData(clubId) {
+    if (String(clubId || '').startsWith('custom_')) {
+      return this._getHouseClubs().find((c) => c.id === clubId) || null;
+    }
+    return null;
   }
 
   _fetchNetworkInfo() {
@@ -377,8 +371,10 @@ class PitchLegendsApp {
     const total = Math.round((participation + goalCoins + winCoins + cleanSheetCoins) * diff.coinBonus);
 
     this.profile.coins += total;
-    this.profile.matchesPlayed += 1;
-    saveProfile(this.profile);
+    this.profile.matchesPlayed = (this.profile.matchesPlayed || 0) + 1;
+    this.profile.goals = (this.profile.goals || 0) + myScore;
+    if (outcome === 'win') this.profile.wins = (this.profile.wins || 0) + 1;
+    this._save();
 
     this.lastRewards = {
       outcome,
@@ -433,14 +429,26 @@ class PitchLegendsApp {
     this.rewardsAwarded = false;
     this.lastRewards = null;
 
+    const homeClubData = this._resolveClubData(this.setup.homeClubId);
+    const awayClubData = this._resolveClubData(this.setup.awayClubId);
+
     this.soloEngine = new MatchEngine({
       homeClubId: this.setup.homeClubId,
       awayClubId: this.setup.awayClubId,
+      homeClubData,
+      awayClubData,
       stadiumId: this.setup.stadiumId,
       difficulty: this.setup.difficulty,
       durationSeconds: this.setup.durationSeconds,
-      homeDraft: this.profile.activeDraft,
-      humans: [{ slotId: 'p1', name: this.profile.playerName || 'You', team: 'home', color: '#38BDF8' }],
+      homeDraft: homeClubData ? [] : this.profile.activeDraft,
+      humans: [
+        {
+          slotId: 'p1',
+          name: this.profile.username || 'Player 1',
+          team: 'home',
+          color: this.profile.avatarColor || '#38BDF8',
+        },
+      ],
     });
 
     this.matchMeta = this.soloEngine.getMeta();
@@ -474,8 +482,21 @@ class PitchLegendsApp {
     }
 
     this.screen = targetScreen;
-    this.renderer.loadShowcase(this.setup.stadiumId || 'bernabeu', this.setup.homeClubId, this.setup.awayClubId);
+    this.renderer.loadShowcase(
+      this.setup.stadiumId || 'olembe',
+      this._resolveClubData(this.setup.homeClubId) || this.setup.homeClubId,
+      this._resolveClubData(this.setup.awayClubId) || this.setup.awayClubId
+    );
     this.renderUI();
+  }
+
+  _bindProfileChip() {
+    this.uiRoot.querySelector('#open-profiles-btn')?.addEventListener('click', () => {
+      soundEngine.unlock();
+      soundEngine.playClick();
+      this.screen = 'profiles';
+      this.renderUI();
+    });
   }
 
   renderUI() {
@@ -484,12 +505,19 @@ class PitchLegendsApp {
       return;
     }
 
+    const houseClubs = this._getHouseClubs();
+
     if (this.screen === 'home') {
-      this.uiRoot.innerHTML = renderHomeScreen(this.profile, {
-        showModal: this.showInstallModal,
-        canNativeInstall: Boolean(this.deferredInstallPrompt),
-        isInstalled: this.isInstalled,
-      });
+      this.uiRoot.innerHTML = renderHomeScreen(
+        this.profile,
+        {
+          showModal: this.showInstallModal,
+          canNativeInstall: Boolean(this.deferredInstallPrompt),
+          isInstalled: this.isInstalled,
+        },
+        this.store.profiles.length
+      );
+      this._bindProfileChip();
       this.uiRoot.querySelector('#home-install-btn')?.addEventListener('click', () => {
         soundEngine.playClick();
         this.showInstallModal = true;
@@ -523,7 +551,11 @@ class PitchLegendsApp {
         soundEngine.playClick();
         this.setupStep = 1;
         this.screen = 'setup';
-        this.renderer.loadShowcase(this.setup.stadiumId, this.setup.homeClubId, this.setup.awayClubId);
+        this.renderer.loadShowcase(
+          this.setup.stadiumId,
+          this._resolveClubData(this.setup.homeClubId) || this.setup.homeClubId,
+          this._resolveClubData(this.setup.awayClubId) || this.setup.awayClubId
+        );
         this.renderUI();
       });
       this.uiRoot.querySelector('#home-play-multi')?.addEventListener('click', () => {
@@ -542,8 +574,76 @@ class PitchLegendsApp {
       return;
     }
 
+    if (this.screen === 'profiles') {
+      this.uiRoot.innerHTML = renderProfilesScreen(this.store, this.profile);
+      this.uiRoot.querySelector('#menu-back-btn')?.addEventListener('click', () => {
+        soundEngine.playClick();
+        this.screen = 'home';
+        this.renderUI();
+      });
+      this.uiRoot.querySelectorAll('[data-select-profile]').forEach((el) => {
+        el.addEventListener('click', (e) => {
+          if (e.target.closest('[data-delete-profile]')) return;
+          soundEngine.playClick();
+          const pid = el.dataset.selectProfile;
+          this.store.activeProfileId = pid;
+          this.setup.homeClubId = `custom_${pid}`;
+          this._save();
+          this.screen = 'home';
+          this.renderUI();
+        });
+      });
+      this.uiRoot.querySelectorAll('[data-delete-profile]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (this.store.profiles.length <= 1) return;
+          soundEngine.playClick();
+          const pid = btn.dataset.deleteProfile;
+          this.store.profiles = this.store.profiles.filter((p) => p.id !== pid);
+          if (this.store.activeProfileId === pid) {
+            this.store.activeProfileId = this.store.profiles[0].id;
+            this.setup.homeClubId = `custom_${this.store.activeProfileId}`;
+          }
+          this._save();
+          this.renderUI();
+        });
+      });
+      this.uiRoot.querySelector('#add-profile-btn')?.addEventListener('click', () => {
+        const input = this.uiRoot.querySelector('#new-profile-name');
+        const name = (input?.value || '').trim().slice(0, 14);
+        if (!name) {
+          input?.focus();
+          return;
+        }
+        const created = createNewProfile(name, this.store.profiles.length);
+        this.store.profiles.push(created);
+        this.store.activeProfileId = created.id;
+        this.setup.homeClubId = `custom_${created.id}`;
+        this._save();
+        soundEngine.playCoinUnlock();
+        this.renderUI();
+      });
+      this.uiRoot.querySelector('#rename-profile-btn')?.addEventListener('click', () => {
+        const input = this.uiRoot.querySelector('#rename-profile-input');
+        const newName = (input?.value || '').trim().slice(0, 14);
+        if (!newName) return;
+        this.profile.username = newName;
+        this._save();
+        soundEngine.playClick();
+        this.renderUI();
+      });
+      return;
+    }
+
     if (this.screen === 'setup') {
-      this.uiRoot.innerHTML = renderMatchSetupScreen(this.profile, this.setup, this.setupStep, this.activeRegion);
+      this.uiRoot.innerHTML = renderMatchSetupScreen(
+        this.profile,
+        this.setup,
+        this.setupStep,
+        this.activeRegion,
+        houseClubs
+      );
+      this._bindProfileChip();
       this.uiRoot.querySelector('#menu-back-btn')?.addEventListener('click', () => {
         soundEngine.playClick();
         if (this.setupStep > 1) {
@@ -585,7 +685,11 @@ class PitchLegendsApp {
           const clubId = btn.dataset.clubId;
           if (side === 'home') this.setup.homeClubId = clubId;
           else this.setup.awayClubId = clubId;
-          this.renderer.loadShowcase(this.setup.stadiumId, this.setup.homeClubId, this.setup.awayClubId);
+          this.renderer.loadShowcase(
+            this.setup.stadiumId,
+            this._resolveClubData(this.setup.homeClubId) || this.setup.homeClubId,
+            this._resolveClubData(this.setup.awayClubId) || this.setup.awayClubId
+          );
           this.renderUI();
         });
       });
@@ -593,7 +697,11 @@ class PitchLegendsApp {
         btn.addEventListener('click', () => {
           soundEngine.playClick();
           const stId = btn.dataset.pickStadium;
-          this.renderer.loadShowcase(stId, this.setup.homeClubId, this.setup.awayClubId);
+          this.renderer.loadShowcase(
+            stId,
+            this._resolveClubData(this.setup.homeClubId) || this.setup.homeClubId,
+            this._resolveClubData(this.setup.awayClubId) || this.setup.awayClubId
+          );
           if (btn.dataset.locked === 'true') {
             this.shopTab = 'stadiums';
             this.previewStadiumId = stId;
@@ -626,7 +734,13 @@ class PitchLegendsApp {
     }
 
     if (this.screen === 'shop') {
-      this.uiRoot.innerHTML = renderShopScreen(this.profile, this.shopTab, this.previewStadiumId);
+      this.uiRoot.innerHTML = renderShopScreen(
+        this.profile,
+        this.shopTab,
+        this.previewStadiumId,
+        this.builderSlot
+      );
+      this._bindProfileChip();
       this.uiRoot.querySelector('#menu-back-btn')?.addEventListener('click', () => {
         soundEngine.playClick();
         this.screen = 'home';
@@ -639,12 +753,64 @@ class PitchLegendsApp {
           this.renderUI();
         });
       });
-      this.uiRoot.querySelector('#shop-clear-draft')?.addEventListener('click', () => {
-        soundEngine.playClick();
-        this.profile.activeDraft = [];
-        saveProfile(this.profile);
+
+      // Custom Dream Team Builder handlers
+      const nameInput = this.uiRoot.querySelector('#custom-team-name-input');
+      nameInput?.addEventListener('change', () => {
+        const val = nameInput.value.trim().slice(0, 18);
+        if (!val) return;
+        this.profile.customTeam.name = val;
+        this.profile.customTeam.shortName = makeShortName(val);
+        this._save();
         this.renderUI();
       });
+      this.uiRoot.querySelector('#builder-autopick-btn')?.addEventListener('click', () => {
+        soundEngine.playCoinUnlock();
+        this.profile.customTeam.rosterIds = autoPickBestRosterIds(this.profile);
+        this._save();
+        this.renderUI();
+      });
+      this.uiRoot.querySelectorAll('[data-pick-kit]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          soundEngine.playClick();
+          this.profile.customTeam.kitId = btn.dataset.pickKit;
+          this._save();
+          this.renderUI();
+        });
+      });
+      this.uiRoot.querySelectorAll('[data-select-slot]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          soundEngine.playClick();
+          this.builderSlot = Number(btn.dataset.selectSlot);
+          this.renderUI();
+        });
+      });
+      this.uiRoot.querySelectorAll('[data-equip-player]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          soundEngine.playClick();
+          const pId = btn.dataset.equipPlayer;
+          const ids = [...this.profile.customTeam.rosterIds];
+          const existingIdx = ids.indexOf(pId);
+          if (existingIdx !== -1 && existingIdx !== this.builderSlot && existingIdx > 0 && this.builderSlot > 0) {
+            // Swap positions if already in team
+            ids[existingIdx] = ids[this.builderSlot];
+          }
+          ids[this.builderSlot] = pId;
+          this.profile.customTeam.rosterIds = ids;
+          this._save();
+          this.renderUI();
+        });
+      });
+      this.uiRoot.querySelector('#play-my-team-now')?.addEventListener('click', () => {
+        soundEngine.playClick();
+        this.setup.homeClubId = `custom_${this.profile.id}`;
+        this.setupStep = 2;
+        this.activeRegion = this.store.profiles.length > 1 ? 'house' : 'africa';
+        this.screen = 'setup';
+        this.renderUI();
+      });
+
+      // Unlockable Superstars & Legends handlers
       this.uiRoot.querySelectorAll('[data-unlock-player]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const pId = btn.dataset.unlockPlayer;
@@ -653,37 +819,35 @@ class PitchLegendsApp {
           if (this.profile.unlockedPlayers.includes(pId)) return;
           this.profile.coins -= player.cost;
           this.profile.unlockedPlayers.push(pId);
-          // Automatically add to active squad if there is space!
-          if (this.profile.activeDraft.length < 4) {
-            this.profile.activeDraft.push(pId);
-          }
-          saveProfile(this.profile);
+          // Immediately place the new unlocked legend in the striker/mid slot of their Dream Team!
+          const targetSlot = player.role === 'MID' ? 2 : 4;
+          this.profile.customTeam.rosterIds[targetSlot] = pId;
+          this._save();
           soundEngine.playCoinUnlock();
           this.renderUI();
         });
       });
-      this.uiRoot.querySelectorAll('[data-toggle-draft]').forEach((btn) => {
+      this.uiRoot.querySelectorAll('[data-equip-unlocked-to-team]').forEach((btn) => {
         btn.addEventListener('click', () => {
           soundEngine.playClick();
-          const pId = btn.dataset.toggleDraft;
-          if (this.profile.activeDraft.includes(pId)) {
-            this.profile.activeDraft = this.profile.activeDraft.filter((id) => id !== pId);
-          } else {
-            if (this.profile.activeDraft.length >= 4) {
-              this.profile.activeDraft.shift();
-            }
-            this.profile.activeDraft.push(pId);
-          }
-          saveProfile(this.profile);
+          const pId = btn.dataset.equipUnlockedToTeam;
+          const player = UNLOCKABLE_PLAYERS.find((p) => p.id === pId);
+          const slot = player?.role === 'MID' ? 2 : 4;
+          this.profile.customTeam.rosterIds[slot] = pId;
+          this.builderSlot = slot;
+          this.shopTab = 'myteam';
+          this._save();
           this.renderUI();
         });
       });
+
+      // Stadium unlocks
       this.uiRoot.querySelectorAll('[data-preview-stadium]').forEach((el) => {
         el.addEventListener('click', (e) => {
           if (e.target.closest('[data-unlock-stadium]')) return;
           const stId = el.dataset.previewStadium;
           this.previewStadiumId = stId;
-          this.renderer.loadShowcase(stId, this.setup.homeClubId, this.setup.awayClubId);
+          this.renderer.loadShowcase(stId, this._resolveClubData(this.setup.homeClubId) || this.setup.homeClubId, this.setup.awayClubId);
           this.renderUI();
         });
       });
@@ -698,9 +862,9 @@ class PitchLegendsApp {
           this.profile.unlockedStadiums.push(stId);
           this.setup.stadiumId = stId;
           this.previewStadiumId = stId;
-          saveProfile(this.profile);
+          this._save();
           soundEngine.playCoinUnlock();
-          this.renderer.loadShowcase(stId, this.setup.homeClubId, this.setup.awayClubId);
+          this.renderer.loadShowcase(stId, this._resolveClubData(this.setup.homeClubId) || this.setup.homeClubId, this.setup.awayClubId);
           this.renderUI();
         });
       });
@@ -710,20 +874,21 @@ class PitchLegendsApp {
     if (this.screen === 'mp-entry') {
       this.uiRoot.innerHTML = renderMultiplayerEntry(
         this.profile,
-        this.profile.playerName,
+        this.profile.username,
         this.prefillRoomCode,
         this.mpError
       );
+      this._bindProfileChip();
       this.uiRoot.querySelector('#menu-back-btn')?.addEventListener('click', () => {
         soundEngine.playClick();
         this.screen = 'home';
         this.renderUI();
       });
       const getName = () => {
-        const val = (this.uiRoot.querySelector('#mp-player-name')?.value || 'Player 1').trim().slice(0, 14);
-        this.profile.playerName = val || 'Player 1';
-        saveProfile(this.profile);
-        return this.profile.playerName;
+        const val = (this.uiRoot.querySelector('#mp-player-name')?.value || this.profile.username || 'Player 1').trim().slice(0, 14);
+        this.profile.username = val || 'Player 1';
+        this._save();
+        return this.profile.username;
       };
       this.uiRoot.querySelector('#mp-create-btn')?.addEventListener('click', () => {
         soundEngine.unlock();

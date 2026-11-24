@@ -29,8 +29,8 @@ export class HudOverlay {
     this.meta = meta;
     this.isMultiplayer = isMultiplayer;
     this.isHost = isHost;
-    this.homeClub = getClubById(meta.homeClubId);
-    this.awayClub = getClubById(meta.awayClubId);
+    this.homeClub = meta.homeClub || getClubById(meta.homeClubId);
+    this.awayClub = meta.awayClub || getClubById(meta.awayClubId);
     this.fulltimeShown = false;
     this.touchState = { mx: 0, mz: 0, sprint: false, shoot: false, pass: false, skill: false };
 

@@ -8,10 +8,23 @@ import {
 } from '../../shared/teamsData.js';
 import { STADIUMS, getStadiumById } from '../../shared/stadiumsData.js';
 import { DIFFICULTIES } from '../../shared/MatchEngine.js';
+import {
+  KIT_PRESETS,
+  SLOT_LABELS,
+  buildCustomClubFromProfile,
+  getAvailablePlayersForProfile,
+} from '../state/ProfileStore.js';
 import { renderClubBadgeSVG } from './ClubBadge.js';
 
-function renderWorldMapSelector(activeRegion) {
+function resolveAnyClub(clubId, houseClubs = []) {
+  const custom = houseClubs.find((c) => c.id === clubId);
+  if (custom) return custom;
+  return getClubById(clubId);
+}
+
+function renderWorldMapSelector(activeRegion, houseCount = 1) {
   const counts = {
+    house: houseCount,
     africa: getClubsByRegion('africa').length,
     europe: getClubsByRegion('europe').length,
     americas: getClubsByRegion('americas').length,
@@ -20,7 +33,6 @@ function renderWorldMapSelector(activeRegion) {
   return `
     <div class="world-map-box">
       <svg class="world-map-svg" viewBox="0 0 600 230" role="img" aria-label="Select football region on world map">
-        <!-- Subtle ocean latitude/longitude grid -->
         <g stroke="rgba(148,163,184,0.12)" stroke-width="1" fill="none">
           <line x1="0" y1="60" x2="600" y2="60"/>
           <line x1="0" y1="115" x2="600" y2="115"/>
@@ -30,13 +42,12 @@ function renderWorldMapSelector(activeRegion) {
           <line x1="450" y1="0" x2="450" y2="230"/>
         </g>
 
-        <!-- Decorative Asia & Oceania silhouettes -->
         <g fill="rgba(148,163,184,0.16)" stroke="rgba(255,255,255,0.08)" stroke-width="1">
           <path d="M362 42 L412 28 L482 36 L526 58 L516 98 L474 114 L442 132 L416 112 L382 104 L356 86 Z"/>
           <path d="M472 156 L526 150 L548 176 L534 202 L486 198 L466 178 Z"/>
         </g>
 
-        <!-- AMERICAS (Clickable Region) -->
+        <!-- AMERICAS -->
         <g class="map-region ${activeRegion === 'americas' ? 'active' : ''}" data-pick-region="americas">
           <path d="M52 24 L124 22 L152 46 L142 78 L112 96 L94 108 L82 96 L64 74 L46 48 Z"/>
           <path d="M114 116 L154 122 L182 146 L172 182 L146 214 L128 206 L122 172 L106 142 Z"/>
@@ -46,7 +57,7 @@ function renderWorldMapSelector(activeRegion) {
           </g>
         </g>
 
-        <!-- EUROPE (Clickable Region) -->
+        <!-- EUROPE -->
         <g class="map-region ${activeRegion === 'europe' ? 'active' : ''}" data-pick-region="europe">
           <path d="M254 34 L288 22 L334 24 L362 42 L354 74 L322 84 L286 84 L264 74 L250 56 Z"/>
           <g class="map-pin">
@@ -55,19 +66,30 @@ function renderWorldMapSelector(activeRegion) {
           </g>
         </g>
 
-        <!-- AFRICA (Clickable Region — Center Stage!) -->
+        <!-- AFRICA -->
         <g class="map-region africa-region ${activeRegion === 'africa' ? 'active' : ''}" data-pick-region="africa">
           <path d="M254 96 L294 90 L338 96 L360 116 L372 138 L354 166 L338 202 L314 214 L294 196 L286 164 L262 148 L244 124 Z"/>
-          <!-- Madagascar -->
           <path d="M366 176 L374 172 L376 194 L366 196 Z"/>
           <g class="map-pin">
             <rect x="262" y="132" width="94" height="24" rx="12"/>
             <text x="309" y="148" text-anchor="middle">AFRICA · ${counts.africa}</text>
           </g>
         </g>
+
+        <!-- MY HOUSE CUSTOM TEAMS PIN -->
+        <g class="map-region house-region ${activeRegion === 'house' ? 'active' : ''}" data-pick-region="house">
+          <g class="map-pin">
+            <rect x="424" y="96" width="124" height="26" rx="13"/>
+            <text x="486" y="113" text-anchor="middle">★ MY HOUSE · ${counts.house}</text>
+          </g>
+        </g>
       </svg>
 
       <div class="region-tabs">
+        <button class="region-tab house-tab ${activeRegion === 'house' ? 'active' : ''}" data-pick-region="house">
+          <span>★ My House</span>
+          <em>${counts.house}</em>
+        </button>
         ${REGIONS.map(
           (r) => `
           <button class="region-tab ${activeRegion === r.id ? 'active' : ''}" data-pick-region="${r.id}">
@@ -102,6 +124,11 @@ export function renderTopBar(profile, backAction = null, title = '') {
         ${title ? `<h2 class="topbar-screen-title">${title}</h2>` : ''}
       </div>
       <div class="topbar-stats">
+        <button class="user-chip" id="open-profiles-btn" title="Switch household player or add family member">
+          <span class="user-dot" style="background:${profile.avatarColor || '#22C55E'}"></span>
+          <strong>${profile.username}</strong>
+          <span class="user-switch-hint">Switch</span>
+        </button>
         ${
           !backAction
             ? `<button class="download-chip" id="home-install-btn" title="Install app to phone home screen or download local version">
@@ -127,8 +154,8 @@ export function renderTopBar(profile, backAction = null, title = '') {
   `;
 }
 
-export function renderHomeScreen(profile, installUi = {}) {
-  const activeDraftCount = profile.activeDraft.length;
+export function renderHomeScreen(profile, installUi = {}, householdCount = 1) {
+  const customClub = buildCustomClubFromProfile(profile);
   const showInstallModal = Boolean(installUi.showModal);
   const canNativeInstall = Boolean(installUi.canNativeInstall);
   const isInstalled = Boolean(installUi.isInstalled);
@@ -138,31 +165,32 @@ export function renderHomeScreen(profile, installUi = {}) {
       ${renderTopBar(profile)}
       <main class="home-hero">
         <div class="hero-copy">
-          <h1>Play Africa &amp; World Football.</h1>
+          <h1>Welcome, ${profile.username}!</h1>
           <p class="hero-lead">
-            Pick Cameroon, Nigeria, Morocco, Senegal, Real Madrid, Man City, Brazil &amp; more. Unlock legends and stadiums!
+            Play with <strong>${customClub.name} (OVR ${customClub.rating})</strong> or any Africa &amp; World team.
+            ${householdCount > 1 ? `${householdCount} family players saved on this device.` : 'Tap your name above to add brothers or parents!'}
           </p>
         </div>
 
         <div class="home-cards">
           <button class="action-card primary-card" id="home-play-solo">
-            <div class="card-kicker">1 Player vs AI</div>
+            <div class="card-kicker">1 Player vs AI · House Teams</div>
             <h3>Play Match</h3>
-            <p>Explore teams on the World Map across Africa, Europe &amp; the Americas.</p>
+            <p>Play with ${customClub.name}, Cameroon, Nigeria, Real Madrid &amp; challenge other family teams!</p>
             <span class="card-cta">Kick Off →</span>
           </button>
 
           <button class="action-card shop-card" id="home-open-shop">
-            <div class="card-kicker">${profile.coins} Coins${activeDraftCount > 0 ? ` · ${activeDraftCount} Drafted` : ''}</div>
-            <h3>Players &amp; Stadiums</h3>
-            <p>Unlock Eto'o, Drogba, Okocha, Weah, Ronaldo, Pelé, Soccer City &amp; Anfield!</p>
-            <span class="card-cta">Open Locker →</span>
+            <div class="card-kicker">${profile.coins} Coins · ${customClub.name}</div>
+            <h3>My Team &amp; Unlocks</h3>
+            <p>Build your custom 5-star team, pick your kit, and unlock Eto'o, Drogba, Pelé &amp; stadiums!</p>
+            <span class="card-cta">Build &amp; Unlock →</span>
           </button>
 
           <button class="action-card wifi-card" id="home-play-multi">
             <div class="card-kicker">3 Devices on Wi-Fi</div>
             <h3>Multiplayer</h3>
-            <p>Connect up to 3 devices on home Wi-Fi for Co-op or 2v1 matches.</p>
+            <p>Connect up to 3 devices on home Wi-Fi for Co-op or 2v1 family matches.</p>
             <span class="card-cta">Wi-Fi Lobby →</span>
           </button>
         </div>
@@ -180,14 +208,14 @@ export function renderHomeScreen(profile, installUi = {}) {
             <div class="im-grid">
               <div class="im-option primary-opt">
                 <strong>Phone Home Screen App (Offline)</strong>
-                <p>Installs Pitch Legends 3D with its own app icon, fullscreen landscape mode, and offline play.</p>
+                <p>Installs Pitch Legends 3D with its own app icon right alongside your other apps — fullscreen &amp; offline.</p>
                 ${
                   isInstalled
                     ? `<span class="unlocked-tag">Already Installed on Home Screen ✓</span>`
                     : canNativeInstall
                       ? `<button class="btn-primary full-btn" id="install-native-trigger">Install to Home Screen</button>`
                       : `<div class="im-steps">
-                          <strong>Chrome Android:</strong> Tap <code>⋮</code> (top right) → <strong>Install app</strong> / <strong>Add to Home screen</strong>.<br/>
+                          <strong>Chrome Android:</strong> Tap <code>⋮</code> (top right) → <strong>Add to Home screen</strong> → <strong>Install</strong>.<br/>
                           <strong>iPhone Safari:</strong> Tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.
                         </div>`
                 }
@@ -215,13 +243,81 @@ export function renderHomeScreen(profile, installUi = {}) {
   `;
 }
 
-export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 'africa') {
-  const homeClub = getClubById(setup.homeClubId);
-  const awayClub = getClubById(setup.awayClubId);
+export function renderProfilesScreen(store, activeProfile) {
+  return `
+    <div class="menu-shell profiles-shell">
+      ${renderTopBar(activeProfile, true, 'Players in the House')}
+      <main class="profiles-grid-layout">
+        <section class="setup-panel">
+          <div class="panel-header">
+            <h3>Switch Player (${store.profiles.length})</h3>
+            <span class="selected-club-tag">Each player keeps their own coins, stars &amp; Dream Team!</span>
+          </div>
+          <div class="profiles-list">
+            ${store.profiles
+              .map((p) => {
+                const isActive = p.id === store.activeProfileId;
+                const club = buildCustomClubFromProfile(p);
+                return `
+                  <div class="profile-row ${isActive ? 'active' : ''}" data-select-profile="${p.id}">
+                    <div class="profile-row-left">
+                      ${renderClubBadgeSVG(club, 38)}
+                      <div>
+                        <strong>${p.username} ${isActive ? '<span class="active-pill">Playing</span>' : ''}</strong>
+                        <div class="profile-meta">${club.name} (OVR ${club.rating}) · ★ ${p.coins} Coins · ${p.wins || 0}W · ${p.goals || 0} Goals</div>
+                      </div>
+                    </div>
+                    <div class="profile-row-actions">
+                      ${!isActive ? `<button class="btn-primary small" data-select-profile="${p.id}">Play</button>` : ''}
+                      ${
+                        store.profiles.length > 1
+                          ? `<button class="btn-ghost small" data-delete-profile="${p.id}" title="Remove player">✕</button>`
+                          : ''
+                      }
+                    </div>
+                  </div>
+                `;
+              })
+              .join('')}
+          </div>
+        </section>
+
+        <aside class="setup-panel">
+          <h3>Add Family Player</h3>
+          <p class="mp-intro">Create a profile for each son or parent so everyone builds their own team and challenges each other!</p>
+          <div class="mp-field">
+            <label for="new-profile-name">New Player Username</label>
+            <input id="new-profile-name" type="text" maxlength="14" placeholder="e.g. Junior, Sam, Dad" />
+          </div>
+          <button class="btn-primary full-btn" id="add-profile-btn">+ Add Player (+220 Starter Coins)</button>
+
+          <hr class="panel-divider" />
+
+          <div class="mp-field">
+            <label for="rename-profile-input">Rename Current Player (${activeProfile.username})</label>
+            <div class="mp-join-row">
+              <input id="rename-profile-input" type="text" maxlength="14" value="${activeProfile.username}" />
+              <button class="btn-gold small" id="rename-profile-btn">Save</button>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+  `;
+}
+
+export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 'africa', houseClubs = []) {
+  const homeClub = resolveAnyClub(setup.homeClubId, houseClubs);
+  const awayClub = resolveAnyClub(setup.awayClubId, houseClubs);
   const stadium = getStadiumById(setup.stadiumId);
-  const homeRoster = buildEffectiveRoster(setup.homeClubId, profile.activeDraft);
-  const awayRoster = buildEffectiveRoster(setup.awayClubId, []);
-  const regionClubs = getClubsByRegion(activeRegion);
+  const homeRoster = homeClub.isCustom
+    ? homeClub.roster
+    : buildEffectiveRoster(setup.homeClubId, profile.activeDraft);
+  const awayRoster = awayClub.isCustom
+    ? awayClub.roster
+    : buildEffectiveRoster(setup.awayClubId, []);
+
+  const regionClubs = activeRegion === 'house' ? houseClubs : getClubsByRegion(activeRegion);
 
   const stepMeta = [
     { n: 1, label: 'Your Team' },
@@ -249,7 +345,7 @@ export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 
       ${renderClubBadgeSVG(club, 30)}
       <div class="club-pill-info">
         <strong>${club.name}</strong>
-        <span>OVR ${club.rating}</span>
+        <span>${club.isCustom ? club.ownerName + ' · ' : ''}OVR ${club.rating}</span>
       </div>
     </button>
   `;
@@ -257,7 +353,7 @@ export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 
   const renderRosterList = (roster, isCustom) => `
     <div class="wizard-roster">
       <div class="roster-preview-title">
-        Starting 5 ${isCustom && profile.activeDraft.length > 0 ? `(+${profile.activeDraft.length} Unlocked Stars)` : ''}
+        Starting 5 ${isCustom ? '(Custom Dream Team)' : ''}
       </div>
       <div class="roster-tags">
         ${roster
@@ -279,7 +375,7 @@ export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 
     bodyHtml = `
       <main class="wizard-body">
         <section class="wizard-main-col map-picker-col">
-          ${renderWorldMapSelector(activeRegion)}
+          ${renderWorldMapSelector(activeRegion, houseClubs.length)}
           <div class="club-grid-scroll">
             ${regionClubs.map((c) => renderClubOption(c, setup.homeClubId, 'home')).join('')}
           </div>
@@ -294,7 +390,7 @@ export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 
               <div class="spot-sub">${homeClub.league} · OVR ${homeClub.rating}</div>
             </div>
           </div>
-          ${renderRosterList(homeRoster, true)}
+          ${renderRosterList(homeRoster, homeClub.isCustom)}
           <div class="wizard-nav-row">
             <button class="btn-primary full-btn" id="wizard-next-btn">Next: Pick Opponent →</button>
           </div>
@@ -305,7 +401,7 @@ export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 
     bodyHtml = `
       <main class="wizard-body">
         <section class="wizard-main-col map-picker-col">
-          ${renderWorldMapSelector(activeRegion)}
+          ${renderWorldMapSelector(activeRegion, houseClubs.length)}
           <div class="club-grid-scroll">
             ${regionClubs.map((c) => renderClubOption(c, setup.awayClubId, 'away')).join('')}
           </div>
@@ -323,7 +419,7 @@ export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 
               <strong>${awayClub.shortName}</strong>
             </div>
           </div>
-          ${renderRosterList(awayRoster, false)}
+          ${renderRosterList(awayRoster, awayClub.isCustom)}
           <div class="wizard-nav-row">
             <button class="btn-secondary" id="wizard-prev-btn">← Back</button>
             <button class="btn-primary flex-1" id="wizard-next-btn">Next: Stadium →</button>
@@ -407,18 +503,22 @@ export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 
   `;
 }
 
-export function renderShopScreen(profile, activeTab = 'players', previewStadiumId = 'bernabeu') {
-  const draftedPlayers = profile.activeDraft
-    .map((id) => UNLOCKABLE_PLAYERS.find((p) => p.id === id))
-    .filter(Boolean);
+export function renderShopScreen(profile, activeTab = 'myteam', previewStadiumId = 'olembe', selectedSlot = 4) {
+  const customClub = buildCustomClubFromProfile(profile);
+  const ct = profile.customTeam;
+  const pool = getAvailablePlayersForProfile(profile, selectedSlot === 0 ? 'gk' : 'outfield');
+  const activeSlotPlayerId = ct.rosterIds[selectedSlot];
 
   return `
     <div class="menu-shell shop-shell">
-      ${renderTopBar(profile, true, 'Locker Room & Unlocks')}
+      ${renderTopBar(profile, true, `${profile.username}’s Locker Room`)}
 
       <div class="shop-tabs">
+        <button class="tab-btn ${activeTab === 'myteam' ? 'active' : ''}" data-shop-tab="myteam">
+          Build My Team (${customClub.name} · ${customClub.rating})
+        </button>
         <button class="tab-btn ${activeTab === 'players' ? 'active' : ''}" data-shop-tab="players">
-          Superstars &amp; Legends (${profile.unlockedPlayers.length}/${UNLOCKABLE_PLAYERS.length})
+          Unlock Legends (${profile.unlockedPlayers.length}/${UNLOCKABLE_PLAYERS.length})
         </button>
         <button class="tab-btn ${activeTab === 'stadiums' ? 'active' : ''}" data-shop-tab="stadiums">
           3D Stadiums (${profile.unlockedStadiums.length}/${STADIUMS.length})
@@ -426,28 +526,82 @@ export function renderShopScreen(profile, activeTab = 'players', previewStadiumI
       </div>
 
       ${
-        activeTab === 'players'
+        activeTab === 'myteam'
           ? `
-        <div class="draft-banner">
-          <div>
-            <strong>Active Squad Draft (${draftedPlayers.length}/4):</strong>
-            <span>${
-              draftedPlayers.length > 0
-                ? draftedPlayers.map((p) => `${p.name} (${p.ovr})`).join(' · ')
-                : 'Unlock a superstar below and tap "Add to Squad" to play with them in any club!'
-            }</span>
-          </div>
-          ${
-            draftedPlayers.length > 0
-              ? `<button class="btn-ghost small" id="shop-clear-draft">Clear Draft</button>`
-              : ''
-          }
-        </div>
+        <main class="builder-layout">
+          <section class="setup-panel builder-left">
+            <div class="builder-club-bar">
+              ${renderClubBadgeSVG(customClub, 46)}
+              <div class="builder-name-wrap">
+                <input id="custom-team-name-input" type="text" maxlength="18" value="${ct.name}" placeholder="Your Club Name" />
+                <div class="builder-ovr-sub">Team OVR <strong>${customClub.rating}</strong> · Owner: ${profile.username}</div>
+              </div>
+              <button class="btn-gold small" id="builder-autopick-btn" title="Fill with your highest-rated stars">Auto Best 5</button>
+            </div>
 
+            <div class="kit-picker-row">
+              ${KIT_PRESETS.map(
+                (k) => `
+                <button class="kit-swatch ${ct.kitId === k.id ? 'selected' : ''}"
+                        data-pick-kit="${k.id}"
+                        title="${k.name}"
+                        style="background: linear-gradient(135deg, ${k.primary} 50%, ${k.secondary} 50%);">
+                </button>
+              `
+              ).join('')}
+            </div>
+
+            <div class="slots-grid">
+              ${customClub.roster
+                .map(
+                  (p, idx) => `
+                <button class="slot-card ${selectedSlot === idx ? 'selected' : ''}" data-select-slot="${idx}">
+                  <span class="slot-role">${SLOT_LABELS[idx]}</span>
+                  <strong>${p.name}</strong>
+                  <em>OVR ${p.ovr}</em>
+                </button>
+              `
+                )
+                .join('')}
+            </div>
+
+            <button class="btn-primary full-btn" id="play-my-team-now">
+              Play Match with ${customClub.name} →
+            </button>
+          </section>
+
+          <section class="setup-panel builder-right">
+            <div class="panel-header">
+              <h3>Pick ${SLOT_LABELS[selectedSlot]} (${pool.length} Stars Ready)</h3>
+              <span class="selected-club-tag">Tap any player to equip</span>
+            </div>
+            <div class="pool-grid">
+              ${pool
+                .map((p) => {
+                  const isEquippedHere = p.id === activeSlotPlayerId;
+                  const isInTeam = ct.rosterIds.includes(p.id);
+                  return `
+                    <button class="pool-card ${isEquippedHere ? 'selected' : ''} ${p.isUnlockable ? 'icon-pick' : ''}"
+                            data-equip-player="${p.id}">
+                      <div class="pool-ovr">${p.ovr}</div>
+                      <div class="pool-info">
+                        <strong>${p.name}</strong>
+                        <span>${p.clubLabel || p.tier} · PAC ${p.pac} SHO ${p.sho}</span>
+                      </div>
+                      ${isInTeam ? `<span class="in-team-dot">✓</span>` : ''}
+                    </button>
+                  `;
+                })
+                .join('')}
+            </div>
+          </section>
+        </main>
+      `
+          : activeTab === 'players'
+            ? `
         <div class="shop-grid">
           ${UNLOCKABLE_PLAYERS.map((p) => {
             const isUnlocked = profile.unlockedPlayers.includes(p.id);
-            const isDrafted = profile.activeDraft.includes(p.id);
             const canAfford = profile.coins >= p.cost;
             return `
               <article class="player-card tier-${p.tier.toLowerCase()} ${isUnlocked ? 'unlocked' : ''}">
@@ -469,8 +623,8 @@ export function renderShopScreen(profile, activeTab = 'players', previewStadiumI
                 <div class="pc-footer">
                   ${
                     isUnlocked
-                      ? `<button class="${isDrafted ? 'btn-secondary' : 'btn-primary'} full-btn" data-toggle-draft="${p.id}">
-                          ${isDrafted ? 'In Your Squad ✓ (Remove)' : 'Add to Your Squad'}
+                      ? `<button class="btn-primary full-btn" data-equip-unlocked-to-team="${p.id}">
+                          Unlocked ✓ — Add to ${customClub.name}
                         </button>`
                       : `<button class="btn-gold full-btn ${canAfford ? '' : 'disabled'}" data-unlock-player="${p.id}" ${canAfford ? '' : 'disabled'}>
                           ${canAfford ? `Unlock for ${p.cost} Coins` : `Need ${p.cost} Coins`}
@@ -482,7 +636,7 @@ export function renderShopScreen(profile, activeTab = 'players', previewStadiumI
           }).join('')}
         </div>
       `
-          : `
+            : `
         <div class="shop-grid stadium-shop-grid">
           ${STADIUMS.map((s) => {
             const isUnlocked = profile.unlockedStadiums.includes(s.id);

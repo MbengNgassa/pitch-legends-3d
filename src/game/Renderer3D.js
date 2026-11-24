@@ -177,12 +177,12 @@ export class Renderer3D {
   /**
    * Renders a live, slowly orbiting 3D stadium behind the Main Menu & Locker screens!
    */
-  loadShowcase(stadiumId = 'bernabeu', homeClubId = 'real-madrid', awayClubId = 'man-city') {
+  loadShowcase(stadiumId = 'olembe', homeClubOrId = 'cameroon', awayClubOrId = 'nigeria') {
     this._clearScene();
     this.mode = 'showcase';
     const stadium = getStadiumById(stadiumId);
-    const homeClub = getClubById(homeClubId);
-    const awayClub = getClubById(awayClubId);
+    const homeClub = typeof homeClubOrId === 'object' && homeClubOrId ? homeClubOrId : getClubById(homeClubOrId);
+    const awayClub = typeof awayClubOrId === 'object' && awayClubOrId ? awayClubOrId : getClubById(awayClubOrId);
     this.stadiumData = stadium;
 
     this._setupLighting(stadium);
@@ -193,7 +193,7 @@ export class Renderer3D {
   }
 
   /**
-   * Initializes the full 3D match scene with real clubs, players, and chosen stadium.
+   * Initializes the full 3D match scene with real clubs or custom Dream Teams, players, and chosen stadium.
    */
   loadMatch(meta, initialSnapshot, localSlotId = 'p1') {
     this._clearScene();
@@ -201,8 +201,8 @@ export class Renderer3D {
     this.localSlotId = localSlotId;
 
     const stadium = getStadiumById(meta.stadiumId);
-    const homeClub = getClubById(meta.homeClubId);
-    const awayClub = getClubById(meta.awayClubId);
+    const homeClub = meta.homeClub || getClubById(meta.homeClubId);
+    const awayClub = meta.awayClub || getClubById(meta.awayClubId);
     this.stadiumData = stadium;
 
     this._setupLighting(stadium);

@@ -94,11 +94,15 @@ export class MatchEngine {
     this.diff = DIFFICULTIES[this.difficultyKey] || DIFFICULTIES.rookie;
     this.matchDuration = config.durationSeconds || 120; // 2 minutes default for brisk fun
 
-    this.homeClub = getClubById(this.homeClubId);
-    this.awayClub = getClubById(this.awayClubId);
+    this.homeClub = config.homeClubData || getClubById(this.homeClubId);
+    this.awayClub = config.awayClubData || getClubById(this.awayClubId);
 
-    this.homeRoster = buildEffectiveRoster(this.homeClubId, config.homeDraft || []);
-    this.awayRoster = buildEffectiveRoster(this.awayClubId, config.awayDraft || []);
+    this.homeRoster = config.homeClubData?.roster
+      ? config.homeClubData.roster.map((p) => ({ ...p }))
+      : buildEffectiveRoster(this.homeClubId, config.homeDraft || []);
+    this.awayRoster = config.awayClubData?.roster
+      ? config.awayClubData.roster.map((p) => ({ ...p }))
+      : buildEffectiveRoster(this.awayClubId, config.awayDraft || []);
 
     /**
      * Human participants: [{ slotId: 'p1', name: 'Leo', team: 'home', color: '#38BDF8', playerId: null }]
@@ -1265,6 +1269,8 @@ export class MatchEngine {
     return {
       homeClubId: this.homeClubId,
       awayClubId: this.awayClubId,
+      homeClub: this.homeClub,
+      awayClub: this.awayClub,
       stadiumId: this.stadiumId,
       difficulty: this.difficultyKey,
       durationSeconds: this.matchDuration,
