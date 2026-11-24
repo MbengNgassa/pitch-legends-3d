@@ -114,6 +114,10 @@ export class HudOverlay {
         <div class="touch-controls ${showTouch ? '' : 'hidden'}" id="hud-touch-layer">
           <div class="touch-joystick-zone" id="touch-joystick-zone">
             <div class="touch-joystick-base" id="touch-joystick-base">
+              <span class="joy-tick up" aria-hidden="true"></span>
+              <span class="joy-tick down" aria-hidden="true"></span>
+              <span class="joy-tick left" aria-hidden="true"></span>
+              <span class="joy-tick right" aria-hidden="true"></span>
               <div class="touch-joystick-knob" id="touch-joystick-knob"></div>
             </div>
           </div>
@@ -166,7 +170,7 @@ export class HudOverlay {
       let activeId = null;
       let originX = 0;
       let originY = 0;
-      const maxR = 48;
+      const maxR = 56;
 
       const updateStick = (clientX, clientY) => {
         const dx = clientX - originX;
