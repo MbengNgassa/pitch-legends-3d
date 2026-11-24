@@ -52,9 +52,10 @@ class PitchLegendsApp {
   constructor() {
     this.profile = loadProfile();
     this.screen = 'home'; // 'home' | 'setup' | 'shop' | 'mp-entry' | 'mp-lobby' | 'match'
-    this.setupStep = 1; // 1: Your Club, 2: Opponent, 3: Stadium & Rules
+    this.setupStep = 1; // 1: Your Team, 2: Opponent, 3: Stadium & Rules
+    this.activeRegion = 'africa';
     this.shopTab = 'players';
-    this.previewStadiumId = 'bernabeu';
+    this.previewStadiumId = 'olembe';
     this.deferredInstallPrompt = null;
     this.showInstallModal = false;
     this.isInstalled =
@@ -75,9 +76,9 @@ class PitchLegendsApp {
     });
 
     this.setup = {
-      homeClubId: 'real-madrid',
-      awayClubId: 'man-city',
-      stadiumId: 'sunlit-park',
+      homeClubId: 'cameroon',
+      awayClubId: 'nigeria',
+      stadiumId: 'olembe',
       difficulty: 'rookie',
       durationSeconds: 120,
     };
@@ -542,7 +543,7 @@ class PitchLegendsApp {
     }
 
     if (this.screen === 'setup') {
-      this.uiRoot.innerHTML = renderMatchSetupScreen(this.profile, this.setup, this.setupStep);
+      this.uiRoot.innerHTML = renderMatchSetupScreen(this.profile, this.setup, this.setupStep, this.activeRegion);
       this.uiRoot.querySelector('#menu-back-btn')?.addEventListener('click', () => {
         soundEngine.playClick();
         if (this.setupStep > 1) {
@@ -552,6 +553,13 @@ class PitchLegendsApp {
           this.screen = 'home';
           this.renderUI();
         }
+      });
+      this.uiRoot.querySelectorAll('[data-pick-region]').forEach((el) => {
+        el.addEventListener('click', () => {
+          soundEngine.playClick();
+          this.activeRegion = el.dataset.pickRegion || 'africa';
+          this.renderUI();
+        });
       });
       this.uiRoot.querySelectorAll('[data-goto-step]').forEach((btn) => {
         btn.addEventListener('click', () => {

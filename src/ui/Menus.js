@@ -1,7 +1,85 @@
-import { CLUBS, UNLOCKABLE_PLAYERS, buildEffectiveRoster, getClubById } from '../../shared/teamsData.js';
+import {
+  CLUBS,
+  REGIONS,
+  UNLOCKABLE_PLAYERS,
+  buildEffectiveRoster,
+  getClubById,
+  getClubsByRegion,
+} from '../../shared/teamsData.js';
 import { STADIUMS, getStadiumById } from '../../shared/stadiumsData.js';
 import { DIFFICULTIES } from '../../shared/MatchEngine.js';
 import { renderClubBadgeSVG } from './ClubBadge.js';
+
+function renderWorldMapSelector(activeRegion) {
+  const counts = {
+    africa: getClubsByRegion('africa').length,
+    europe: getClubsByRegion('europe').length,
+    americas: getClubsByRegion('americas').length,
+  };
+
+  return `
+    <div class="world-map-box">
+      <svg class="world-map-svg" viewBox="0 0 600 230" role="img" aria-label="Select football region on world map">
+        <!-- Subtle ocean latitude/longitude grid -->
+        <g stroke="rgba(148,163,184,0.12)" stroke-width="1" fill="none">
+          <line x1="0" y1="60" x2="600" y2="60"/>
+          <line x1="0" y1="115" x2="600" y2="115"/>
+          <line x1="0" y1="170" x2="600" y2="170"/>
+          <line x1="150" y1="0" x2="150" y2="230"/>
+          <line x1="300" y1="0" x2="300" y2="230"/>
+          <line x1="450" y1="0" x2="450" y2="230"/>
+        </g>
+
+        <!-- Decorative Asia & Oceania silhouettes -->
+        <g fill="rgba(148,163,184,0.16)" stroke="rgba(255,255,255,0.08)" stroke-width="1">
+          <path d="M362 42 L412 28 L482 36 L526 58 L516 98 L474 114 L442 132 L416 112 L382 104 L356 86 Z"/>
+          <path d="M472 156 L526 150 L548 176 L534 202 L486 198 L466 178 Z"/>
+        </g>
+
+        <!-- AMERICAS (Clickable Region) -->
+        <g class="map-region ${activeRegion === 'americas' ? 'active' : ''}" data-pick-region="americas">
+          <path d="M52 24 L124 22 L152 46 L142 78 L112 96 L94 108 L82 96 L64 74 L46 48 Z"/>
+          <path d="M114 116 L154 122 L182 146 L172 182 L146 214 L128 206 L122 172 L106 142 Z"/>
+          <g class="map-pin">
+            <rect x="66" y="128" width="96" height="24" rx="12"/>
+            <text x="114" y="144" text-anchor="middle">AMERICAS · ${counts.americas}</text>
+          </g>
+        </g>
+
+        <!-- EUROPE (Clickable Region) -->
+        <g class="map-region ${activeRegion === 'europe' ? 'active' : ''}" data-pick-region="europe">
+          <path d="M254 34 L288 22 L334 24 L362 42 L354 74 L322 84 L286 84 L264 74 L250 56 Z"/>
+          <g class="map-pin">
+            <rect x="256" y="42" width="94" height="24" rx="12"/>
+            <text x="303" y="58" text-anchor="middle">EUROPE · ${counts.europe}</text>
+          </g>
+        </g>
+
+        <!-- AFRICA (Clickable Region — Center Stage!) -->
+        <g class="map-region africa-region ${activeRegion === 'africa' ? 'active' : ''}" data-pick-region="africa">
+          <path d="M254 96 L294 90 L338 96 L360 116 L372 138 L354 166 L338 202 L314 214 L294 196 L286 164 L262 148 L244 124 Z"/>
+          <!-- Madagascar -->
+          <path d="M366 176 L374 172 L376 194 L366 196 Z"/>
+          <g class="map-pin">
+            <rect x="262" y="132" width="94" height="24" rx="12"/>
+            <text x="309" y="148" text-anchor="middle">AFRICA · ${counts.africa}</text>
+          </g>
+        </g>
+      </svg>
+
+      <div class="region-tabs">
+        ${REGIONS.map(
+          (r) => `
+          <button class="region-tab ${activeRegion === r.id ? 'active' : ''}" data-pick-region="${r.id}">
+            <span>${r.name}</span>
+            <em>${counts[r.id]}</em>
+          </button>
+        `
+        ).join('')}
+      </div>
+    </div>
+  `;
+}
 
 export function renderTopBar(profile, backAction = null, title = '') {
   const unlockedPlayersCount = profile.unlockedPlayers.length;
@@ -17,7 +95,7 @@ export function renderTopBar(profile, backAction = null, title = '') {
                 <span class="brand-ball" aria-hidden="true">⚽</span>
                 <div>
                   <div class="brand-title">PITCH LEGENDS 3D</div>
-                  <div class="brand-sub">Local &amp; 3-Device Wi-Fi Edition</div>
+                  <div class="brand-sub">Africa &amp; World Edition</div>
                 </div>
               </div>`
         }
@@ -60,9 +138,9 @@ export function renderHomeScreen(profile, installUi = {}) {
       ${renderTopBar(profile)}
       <main class="home-hero">
         <div class="hero-copy">
-          <h1>Play Real Clubs. Unlock Legends.</h1>
+          <h1>Play Africa &amp; World Football.</h1>
           <p class="hero-lead">
-            Fast, kid-friendly 5v5 3D football with real stars, unlockable stadiums, and 3-device Wi-Fi play.
+            Pick Cameroon, Nigeria, Morocco, Senegal, Real Madrid, Man City, Brazil &amp; more. Unlock legends and stadiums!
           </p>
         </div>
 
@@ -70,14 +148,14 @@ export function renderHomeScreen(profile, installUi = {}) {
           <button class="action-card primary-card" id="home-play-solo">
             <div class="card-kicker">1 Player vs AI</div>
             <h3>Play Match</h3>
-            <p>Pick your club, opponent &amp; stadium in 3 quick taps. Rookie Kid Mode ready!</p>
+            <p>Explore teams on the World Map across Africa, Europe &amp; the Americas.</p>
             <span class="card-cta">Kick Off →</span>
           </button>
 
           <button class="action-card shop-card" id="home-open-shop">
             <div class="card-kicker">${profile.coins} Coins${activeDraftCount > 0 ? ` · ${activeDraftCount} Drafted` : ''}</div>
             <h3>Players &amp; Stadiums</h3>
-            <p>Unlock Ronaldo, Pelé, Ronaldinho, Maradona, Camp Nou, Anfield &amp; Maracanã.</p>
+            <p>Unlock Eto'o, Drogba, Okocha, Weah, Ronaldo, Pelé, Soccer City &amp; Anfield!</p>
             <span class="card-cta">Open Locker →</span>
           </button>
 
@@ -137,15 +215,16 @@ export function renderHomeScreen(profile, installUi = {}) {
   `;
 }
 
-export function renderMatchSetupScreen(profile, setup, step = 1) {
+export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 'africa') {
   const homeClub = getClubById(setup.homeClubId);
   const awayClub = getClubById(setup.awayClubId);
   const stadium = getStadiumById(setup.stadiumId);
   const homeRoster = buildEffectiveRoster(setup.homeClubId, profile.activeDraft);
   const awayRoster = buildEffectiveRoster(setup.awayClubId, []);
+  const regionClubs = getClubsByRegion(activeRegion);
 
   const stepMeta = [
-    { n: 1, label: 'Your Club' },
+    { n: 1, label: 'Your Team' },
     { n: 2, label: 'Opponent' },
     { n: 3, label: 'Stadium & Rules' },
   ];
@@ -167,7 +246,7 @@ export function renderMatchSetupScreen(profile, setup, step = 1) {
 
   const renderClubOption = (club, selectedId, side) => `
     <button class="club-pill ${club.id === selectedId ? 'selected' : ''}" data-pick-club="${side}" data-club-id="${club.id}">
-      ${renderClubBadgeSVG(club, 32)}
+      ${renderClubBadgeSVG(club, 30)}
       <div class="club-pill-info">
         <strong>${club.name}</strong>
         <span>OVR ${club.rating}</span>
@@ -199,19 +278,20 @@ export function renderMatchSetupScreen(profile, setup, step = 1) {
   if (step === 1) {
     bodyHtml = `
       <main class="wizard-body">
-        <section class="wizard-main-col">
-          <div class="club-grid-4">
-            ${CLUBS.map((c) => renderClubOption(c, setup.homeClubId, 'home')).join('')}
+        <section class="wizard-main-col map-picker-col">
+          ${renderWorldMapSelector(activeRegion)}
+          <div class="club-grid-scroll">
+            ${regionClubs.map((c) => renderClubOption(c, setup.homeClubId, 'home')).join('')}
           </div>
         </section>
 
         <aside class="wizard-side-col">
           <div class="selected-spotlight">
-            ${renderClubBadgeSVG(homeClub, 54)}
+            ${renderClubBadgeSVG(homeClub, 50)}
             <div>
               <div class="spot-kicker">YOUR TEAM (HOME)</div>
               <h3>${homeClub.name}</h3>
-              <div class="spot-sub">${homeClub.league} · Team OVR ${homeClub.rating}</div>
+              <div class="spot-sub">${homeClub.league} · OVR ${homeClub.rating}</div>
             </div>
           </div>
           ${renderRosterList(homeRoster, true)}
@@ -224,21 +304,22 @@ export function renderMatchSetupScreen(profile, setup, step = 1) {
   } else if (step === 2) {
     bodyHtml = `
       <main class="wizard-body">
-        <section class="wizard-main-col">
-          <div class="club-grid-4">
-            ${CLUBS.map((c) => renderClubOption(c, setup.awayClubId, 'away')).join('')}
+        <section class="wizard-main-col map-picker-col">
+          ${renderWorldMapSelector(activeRegion)}
+          <div class="club-grid-scroll">
+            ${regionClubs.map((c) => renderClubOption(c, setup.awayClubId, 'away')).join('')}
           </div>
         </section>
 
         <aside class="wizard-side-col">
           <div class="matchup-card">
             <div class="matchup-side">
-              ${renderClubBadgeSVG(homeClub, 44)}
+              ${renderClubBadgeSVG(homeClub, 42)}
               <strong>${homeClub.shortName}</strong>
             </div>
             <span class="matchup-vs">VS</span>
             <div class="matchup-side">
-              ${renderClubBadgeSVG(awayClub, 44)}
+              ${renderClubBadgeSVG(awayClub, 42)}
               <strong>${awayClub.shortName}</strong>
             </div>
           </div>
@@ -254,7 +335,7 @@ export function renderMatchSetupScreen(profile, setup, step = 1) {
     bodyHtml = `
       <main class="wizard-body">
         <section class="wizard-main-col">
-          <div class="stadium-picker-3">
+          <div class="stadium-picker-3 stadium-scroll">
             ${STADIUMS.map((s) => {
               const unlocked = profile.unlockedStadiums.includes(s.id);
               const active = setup.stadiumId === s.id;
@@ -263,7 +344,7 @@ export function renderMatchSetupScreen(profile, setup, step = 1) {
                         data-pick-stadium="${s.id}" ${unlocked ? '' : 'data-locked="true"'}>
                   <div class="st-bar" style="background: linear-gradient(90deg, ${s.skyTop}, ${s.skyHorizon}, ${s.grassA});"></div>
                   <strong>${s.name}</strong>
-                  <span>${unlocked ? s.timeOfDay : `Unlock · ${s.cost} Coins`}</span>
+                  <span>${unlocked ? s.city : `Unlock · ${s.cost} Coins`}</span>
                 </button>
               `;
             }).join('')}
