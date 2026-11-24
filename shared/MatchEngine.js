@@ -867,6 +867,8 @@ export class MatchEngine {
     // Determine if this AI is the intended receiver of an active pass or closest ball chaser
     const isPassReceiver = !this.ball.ownerId && this.ball.passTargetId === p.id && this.ball.passAssistTimer > 0;
     const isChaser = !isPassReceiver && !teamHasBall && this._isClosestAIBallChaser(p);
+    // Own-half reference: home own half is negative X (-attackDir), away own half is positive X (-attackDir)
+    const ownDir = -attackDir;
 
     let targetX = p.baseX;
     let targetZ = p.baseZ;
@@ -876,6 +878,7 @@ export class MatchEngine {
       targetX = clamp(this.ball.x + this.ball.vx * 0.2, -PITCH.halfLength + 2, PITCH.halfLength - 2);
       targetZ = clamp(this.ball.z + this.ball.vz * 0.2, -PITCH.halfWidth + 2, PITCH.halfWidth - 2);
     } else if (isChaser) {
+      // Closest player presses the ball, but Defender avoids chasing deep into opponent's box if a teammate can press
       targetX = this.ball.x + this.ball.vx * 0.14;
       targetZ = this.ball.z + this.ball.vz * 0.14;
 
@@ -887,48 +890,89 @@ export class MatchEngine {
         }
       }
     } else if (teamHasBall) {
-      // Intelligent attacking runs! Teammates push ahead into open passing lanes as you attack goal
+      // Balanced attacking shape: Striker & Winger push high, Midfielder bridges play, Defender anchors own half!
       const carrierZ = owner ? owner.z : this.ball.z;
       const carrierX = owner ? owner.x : this.ball.x;
-      const oppGoalX = attackDir * (PITCH.halfLength - 8);
+      const oppGoalX = attackDir * (PITCH.halfLength - 9);
 
       if (p.slotIndex === 4) {
         // Striker spearheads forward into space ahead of the ball carrier!
-        targetX = clamp(carrierX + attackDir * 22, -PITCH.halfLength + 12, oppGoalX);
-        targetZ = clamp(-Math.sign(carrierZ || 1) * 11, -PITCH.halfWidth + 7, PITCH.halfWidth - 7);
+        targetX = clamp(carrierX + attackDir * 22, -PITCH.halfLength + 14, oppGoalX);
+        targetZ = clamp(-Math.sign(carrierZ || 1) * 12, -PITCH.halfWidth + 7, PITCH.halfWidth - 7);
       } else if (p.slotIndex === 3) {
         // Winger makes a wide overlapping sprint down the opposite flank!
-        targetX = clamp(carrierX + attackDir * 17, -PITCH.halfLength + 10, oppGoalX + 2);
+        targetX = clamp(carrierX + attackDir * 17, -PITCH.halfLength + 12, oppGoalX + 2);
         const wingSide = carrierZ >= 0 ? -1 : 1;
-        targetZ = clamp(wingSide * 20, -PITCH.halfWidth + 5, PITCH.halfWidth - 5);
+        targetZ = clamp(wingSide * 22, -PITCH.halfWidth + 5, PITCH.halfWidth - 5);
       } else if (p.slotIndex === 2) {
-        // Midfielder offers a smart diagonal forward-support triangle
-        targetX = clamp(carrierX + attackDir * 9, -PITCH.halfLength + 10, oppGoalX - 6);
-        targetZ = clamp((carrierZ >= 0 ? -1 : 1) * 10 + Math.sin(this.timeRemaining * 0.7) * 4, -PITCH.halfWidth + 6, PITCH.halfWidth - 6);
+        // Midfielder plays box-to-box: supports attack near midfield / edge of attacking third without deserting cover
+        const midRawX = carrierX * 0.55 + attackDir * 6;
+        const midMaxAttack = attackDir * 24;
+        const midMinBack = ownDir * 22;
+        targetX = attackDir > 0 ? clamp(midRawX, midMinBack, midMaxAttack) : clamp(midRawX, midMaxAttack, midMinBack);
+        targetZ = clamp((carrierZ >= 0 ? -1 : 1) * 11 + Math.sin(this.timeRemaining * 0.7) * 4, -PITCH.halfWidth + 7, PITCH.halfWidth - 7);
       } else {
-        // Defender holds smart midfield support ready for back-pass or counter-defense
-        targetX = clamp(carrierX - attackDir * 14, -PITCH.halfLength + 14, PITCH.halfLength - 22);
-        targetZ = clamp(carrierZ * 0.4, -PITCH.halfWidth + 8, PITCH.halfWidth - 8);
+        // DEFENDER ALWAYS ANCHORS OWN HALF (stops empty-half cherry-picking & tracks any lurking striker!)
+        const minOwnDepth = ownDir * 14;
+        const maxOwnDepth = ownDir * 42;
+        const idealDefX = ownDir * 24 + carrierX * 0.25;
+        targetX = ownDir > 0 ? clamp(idealDefX, minOwnDepth, maxOwnDepth) : clamp(idealDefX, maxOwnDepth, minOwnDepth);
+        targetZ = clamp(carrierZ * 0.35, -14, 14);
+
+        // If an opponent attacker is lurking in our half waiting for a counter, track goal-side of them!
+        let lurkingOpp = null;
+        let deepest = -Infinity;
+        for (const opp of this.players) {
+          if (opp.team === p.team || opp.isGK) continue;
+          const depthInMyHalf = opp.x * ownDir;
+          if (depthInMyHalf > 4 && depthInMyHalf > deepest) {
+            deepest = depthInMyHalf;
+            lurkingOpp = opp;
+          }
+        }
+        if (lurkingOpp) {
+          targetX = clamp(lurkingOpp.x + ownDir * 5.5, -PITCH.halfLength + 10, PITCH.halfLength - 10);
+          targetZ = clamp(lurkingOpp.z * 0.8, -PITCH.halfWidth + 6, PITCH.halfWidth - 6);
+        }
       }
 
-      // Actively drift away from nearby defenders to get open for passes!
-      for (const opp of this.players) {
-        if (opp.team === p.team || opp.isGK) continue;
-        const odx = targetX - opp.x;
-        const odz = targetZ - opp.z;
-        const od = Math.hypot(odx, odz);
-        if (od < 7.5 && od > 0.1) {
-          targetX += (odx / od) * 4.5;
-          targetZ += (odz / od) * 6.0;
+      // Forward & midfield attackers drift away from nearby defenders to open passing lanes
+      if (p.slotIndex >= 2) {
+        for (const opp of this.players) {
+          if (opp.team === p.team || opp.isGK) continue;
+          const odx = targetX - opp.x;
+          const odz = targetZ - opp.z;
+          const od = Math.hypot(odx, odz);
+          if (od < 7.5 && od > 0.1) {
+            targetX += (odx / od) * 4.5;
+            targetZ += (odz / od) * 6.0;
+          }
         }
       }
       targetX = clamp(targetX, -PITCH.halfLength + 5, PITCH.halfLength - 5);
       targetZ = clamp(targetZ, -PITCH.halfWidth + 4, PITCH.halfWidth - 4);
     } else {
-      // Compact defensive zonal shape
-      const shiftX = clamp(this.ball.x * 0.62 - attackDir * 10, -PITCH.halfLength + 9, PITCH.halfLength - 9);
-      targetX = p.baseX * 0.42 + shiftX * 0.58;
-      targetZ = clamp(p.baseZ * 0.55 + this.ball.z * 0.4, -PITCH.halfWidth + 5, PITCH.halfWidth - 5);
+      // Role-disciplined defensive shape: DEF & MID stay goal-side in own half, FWDs sit ready for counter!
+      if (p.slotIndex === 1) {
+        // Center-back stays deep goal-side between ball and own goal
+        const goalSideX = this.ball.x * 0.55 + ownDir * 24;
+        const minOwn = ownDir * 16;
+        const maxOwn = ownDir * 48;
+        targetX = ownDir > 0 ? clamp(goalSideX, minOwn, maxOwn) : clamp(goalSideX, maxOwn, minOwn);
+        targetZ = clamp(this.ball.z * 0.55, -18, 18);
+      } else if (p.slotIndex === 2) {
+        // Defensive midfielder screens right in front of the defender
+        const screenX = this.ball.x * 0.65 + ownDir * 13;
+        const minOwn = ownDir * 4;
+        const maxOwn = ownDir * 36;
+        targetX = ownDir > 0 ? clamp(screenX, minOwn, maxOwn) : clamp(screenX, maxOwn, minOwn);
+        targetZ = clamp(this.ball.z * 0.45 + p.baseZ * 0.35, -PITCH.halfWidth + 6, PITCH.halfWidth - 6);
+      } else {
+        // Forwards hold balanced midfield/counter shape without abandoning midfield
+        const shiftX = clamp(this.ball.x * 0.55 + ownDir * 4, -PITCH.halfLength + 12, PITCH.halfLength - 12);
+        targetX = p.baseX * 0.35 + shiftX * 0.65;
+        targetZ = clamp(p.baseZ * 0.6 + this.ball.z * 0.3, -PITCH.halfWidth + 5, PITCH.halfWidth - 5);
+      }
     }
 
     const dx = targetX - p.x;
@@ -936,7 +980,7 @@ export class MatchEngine {
     const dist = Math.hypot(dx, dz);
     if (dist > 0.6) {
       const n = normalize2(dx, dz);
-      const speedMul = isPassReceiver ? 1.12 : isChaser ? 0.98 : teamHasBall ? 0.96 : 0.84;
+      const speedMul = isPassReceiver ? 1.12 : isChaser ? 0.98 : teamHasBall ? 0.96 : 0.88;
       p.vx = n.x * Math.min(aiSpeed * speedMul, dist * 4.5);
       p.vz = n.z * Math.min(aiSpeed * speedMul, dist * 4.5);
       p.facing = lerpAngle(p.facing, Math.atan2(n.z, n.x), Math.min(1, dt * 10));
@@ -948,13 +992,17 @@ export class MatchEngine {
   }
 
   _isClosestAIBallChaser(candidate) {
+    const attackDir = candidate.team === 'home' ? 1 : -1;
+    const ballInOppHalf = this.ball.x * attackDir > 8;
     let best = null;
-    let bestDist = Infinity;
+    let bestScore = Infinity;
     for (const p of this.players) {
       if (p.team !== candidate.team || p.isGK || p.humanSlotId) continue;
-      const d = hypot2(p.x - this.ball.x, p.z - this.ball.z);
-      if (d < bestDist) {
-        bestDist = d;
+      // Keep the Defender anchored in own half instead of chasing deep into the opponent's half
+      const defPenalty = p.slotIndex === 1 && ballInOppHalf ? 45 : 0;
+      const score = hypot2(p.x - this.ball.x, p.z - this.ball.z) + defPenalty;
+      if (score < bestScore) {
+        bestScore = score;
         best = p;
       }
     }
