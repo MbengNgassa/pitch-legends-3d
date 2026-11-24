@@ -2,31 +2,39 @@
   "id": "/pitch-legends-3d/",
   "name": "Pitch Legends 3D",
   "short_name": "Pitch Legends",
-  "description": "Kid-friendly 3D football game with real clubs, unlockable stars & stadiums, and 3-device Wi-Fi multiplayer.",
-  "start_url": "./",
-  "scope": "./",
-  "display": "fullscreen",
+  "description": "Kid-friendly 3D football game with African & World teams, unlockable legends & stadiums, and 3-device Wi-Fi multiplayer.",
+  "start_url": "/pitch-legends-3d/",
+  "scope": "/pitch-legends-3d/",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
   "orientation": "landscape",
   "background_color": "#0b1218",
   "theme_color": "#16a34a",
+  "categories": ["games", "sports"],
   "icons": [
     {
       "src": "./icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "./icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "./icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

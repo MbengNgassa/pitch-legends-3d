@@ -49,7 +49,7 @@ export class StadiumBuilder {
   }
 
   _buildSkyDome() {
-    const skyGeo = new THREE.SphereGeometry(240, 32, 20);
+    const skyGeo = new THREE.SphereGeometry(310, 32, 20);
     const skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
@@ -131,7 +131,7 @@ export class StadiumBuilder {
       roughness: 0.92,
       metalness: 0.0,
     });
-    const apron = new THREE.Mesh(new THREE.PlaneGeometry(240, 180), apronMat);
+    const apron = new THREE.Mesh(new THREE.PlaneGeometry(280, 210), apronMat);
     apron.rotation.x = -Math.PI / 2;
     apron.position.y = -0.05;
     apron.receiveShadow = true;
@@ -145,7 +145,7 @@ export class StadiumBuilder {
       metalness: 0.02,
     });
     // Slightly larger than exact lines so the inner chalk borders match PITCH.length x PITCH.width
-    const pitchGeo = new THREE.PlaneGeometry(PITCH.length + 8.6, PITCH.width + 7.2);
+    const pitchGeo = new THREE.PlaneGeometry(PITCH.length + 9.6, PITCH.width + 8.0);
     const pitchMesh = new THREE.Mesh(pitchGeo, pitchMat);
     pitchMesh.rotation.x = -Math.PI / 2;
     pitchMesh.position.y = 0;
@@ -156,14 +156,14 @@ export class StadiumBuilder {
   _buildGoals() {
     const postMat = new THREE.MeshStandardMaterial({
       color: '#F8FAFC',
-      roughness: 0.28,
+      roughness: 0.25,
       metalness: 0.35,
     });
     const netMat = new THREE.MeshStandardMaterial({
       color: '#F1F5F9',
       wireframe: true,
       transparent: true,
-      opacity: 0.58,
+      opacity: 0.62,
       side: THREE.DoubleSide,
     });
 
@@ -174,8 +174,8 @@ export class StadiumBuilder {
       const h = PITCH.goalHeight;
       const d = PITCH.goalDepth * side;
 
-      // Vertical posts
-      const postGeo = new THREE.CylinderGeometry(0.14, 0.14, h, 12);
+      // Vertical posts (bold, realistic white posts)
+      const postGeo = new THREE.CylinderGeometry(0.18, 0.18, h, 12);
       const pLeft = new THREE.Mesh(postGeo, postMat);
       pLeft.position.set(xBase, h / 2, -hw);
       pLeft.castShadow = true;
@@ -184,7 +184,7 @@ export class StadiumBuilder {
       pRight.castShadow = true;
 
       // Crossbar
-      const barGeo = new THREE.CylinderGeometry(0.14, 0.14, hw * 2 + 0.28, 12);
+      const barGeo = new THREE.CylinderGeometry(0.18, 0.18, hw * 2 + 0.36, 12);
       barGeo.rotateX(Math.PI / 2);
       const bar = new THREE.Mesh(barGeo, postMat);
       bar.position.set(xBase, h, 0);

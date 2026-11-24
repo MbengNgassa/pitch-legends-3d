@@ -110,8 +110,8 @@ export class Renderer3D {
     sun.shadow.mapSize.width = shadowRes;
     sun.shadow.mapSize.height = shadowRes;
     sun.shadow.camera.near = 10;
-    sun.shadow.camera.far = 260;
-    const d = 78;
+    sun.shadow.camera.far = 290;
+    const d = 92;
     sun.shadow.camera.left = -d;
     sun.shadow.camera.right = d;
     sun.shadow.camera.top = d;
@@ -424,23 +424,23 @@ export class Renderer3D {
       this.cameraPos.lerp(desiredPos, Math.min(1, clampedDt * 4.5));
       this.cameraTarget.lerp(desiredTarget, Math.min(1, clampedDt * 6));
     } else {
-      // Closer console-style broadcast framing covering the full 110x68 pitch smoothly!
-      const focusX = localPlayerState ? b.x * 0.72 + localPlayerState.x * 0.28 : b.x;
-      const focusZ = localPlayerState ? b.z * 0.72 + localPlayerState.z * 0.28 : b.z;
-      const clampedX = Math.max(-(PITCH.halfLength - 13), Math.min(PITCH.halfLength - 13, focusX * 0.9));
-      const clampedZ = Math.max(-(PITCH.halfWidth - 13), Math.min(PITCH.halfWidth - 11, focusZ * 0.68));
+      // Full-pitch broadcast camera: tracks all the way to the near bottom touchline so players NEVER clip off-screen!
+      const focusX = localPlayerState ? b.x * 0.65 + localPlayerState.x * 0.35 : b.x;
+      const focusZ = localPlayerState ? b.z * 0.65 + localPlayerState.z * 0.35 : b.z;
+      const targetX = Math.max(-(PITCH.halfLength - 11), Math.min(PITCH.halfLength - 11, focusX * 0.94));
+      // Track near (+Z) touchline generously (even slightly past +halfWidth) so the bottom edge + touch controls never hide the player!
+      const targetZ = Math.max(-(PITCH.halfWidth - 10), Math.min(PITCH.halfWidth + 2, focusZ * 0.95 + 2.0));
 
       const portraitBoost = this.camera.aspect < 1 ? Math.min(16, (1 / Math.max(0.45, this.camera.aspect) - 1) * 16) : 0;
-      const boxZoom = Math.min(3.2, Math.max(0, (Math.abs(b.x) - 32) * 0.16));
-      const desiredPos = new THREE.Vector3(
-        clampedX * 0.92,
-        21.0 + portraitBoost * 0.8 - boxZoom * 0.5,
-        28.2 + portraitBoost * 1.0 - boxZoom + clampedZ * 0.52
-      );
-      const desiredTarget = new THREE.Vector3(clampedX, 1.5, clampedZ * 0.72);
+      const boxZoom = Math.min(2.6, Math.max(0, (Math.abs(b.x) - 40) * 0.14));
+      const camHeight = 22.0 + portraitBoost * 0.8 - boxZoom * 0.45;
+      const camBackZ = 29.5 + portraitBoost * 1.0 - boxZoom * 0.8;
 
-      this.cameraPos.lerp(desiredPos, Math.min(1, clampedDt * 5.2));
-      this.cameraTarget.lerp(desiredTarget, Math.min(1, clampedDt * 6.5));
+      const desiredPos = new THREE.Vector3(targetX, camHeight, targetZ + camBackZ);
+      const desiredTarget = new THREE.Vector3(targetX, 1.4, targetZ);
+
+      this.cameraPos.lerp(desiredPos, Math.min(1, clampedDt * 5.8));
+      this.cameraTarget.lerp(desiredTarget, Math.min(1, clampedDt * 7.2));
     }
 
     // Apply decaying camera shake

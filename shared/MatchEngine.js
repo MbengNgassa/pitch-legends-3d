@@ -1,15 +1,15 @@
 import { buildEffectiveRoster, getClubById } from './teamsData.js';
 
 export const PITCH = {
-  length: 110,
-  width: 68,
-  halfLength: 55,
-  halfWidth: 34,
-  goalWidth: 13.0,
-  goalHalfWidth: 6.5,
-  goalHeight: 5.0,
-  goalDepth: 4.2,
-  ballRadius: 0.36,
+  length: 126,
+  width: 78,
+  halfLength: 63,
+  halfWidth: 39,
+  goalWidth: 15.4,
+  goalHalfWidth: 7.7,
+  goalHeight: 6.0,
+  goalDepth: 4.8,
+  ballRadius: 0.27,
   playerRadius: 1.05,
 };
 
@@ -21,7 +21,7 @@ export const DIFFICULTIES = {
     aiShootPower: 0.78,
     aiTackleRange: 1.55,
     gkSpeedMul: 0.74,
-    humanMagnetBonus: 0.48,
+    humanMagnetBonus: 0.52,
     humanAimAssist: 0.58,
     coinBonus: 1.0,
   },
@@ -32,7 +32,7 @@ export const DIFFICULTIES = {
     aiShootPower: 0.92,
     aiTackleRange: 1.85,
     gkSpeedMul: 0.9,
-    humanMagnetBonus: 0.32,
+    humanMagnetBonus: 0.34,
     humanAimAssist: 0.38,
     coinBonus: 1.25,
   },
@@ -43,7 +43,7 @@ export const DIFFICULTIES = {
     aiShootPower: 1.04,
     aiTackleRange: 2.05,
     gkSpeedMul: 1.04,
-    humanMagnetBonus: 0.2,
+    humanMagnetBonus: 0.22,
     humanAimAssist: 0.22,
     coinBonus: 1.5,
   },
@@ -51,13 +51,13 @@ export const DIFFICULTIES = {
 
 export const HUMAN_COLORS = ['#38BDF8', '#22C55E', '#FB923C'];
 
-// 5-a-side base formations spread nicely across the 110x68 pitch (home attacks +X)
+// 5-a-side base formations spread across the spacious 126x78 pitch (home attacks +X)
 const HOME_FORMATION = [
-  { x: -51.5, z: 0 },      // 0: GK
-  { x: -27.5, z: -9.5 },   // 1: DEF
-  { x: -16.5, z: 11.0 },   // 2: MID
-  { x: -7.5, z: -13.5 },   // 3: FWD winger
-  { x: -4.5, z: 4.5 },     // 4: FWD striker
+  { x: -59.0, z: 0 },      // 0: GK
+  { x: -32.0, z: -11.5 },  // 1: DEF
+  { x: -19.5, z: 13.0 },   // 2: MID
+  { x: -8.5, z: -15.5 },   // 3: FWD winger
+  { x: -4.5, z: 5.0 },     // 4: FWD striker
 ];
 
 function clamp(v, min, max) {
@@ -1005,7 +1005,7 @@ export class MatchEngine {
 
     if (owner) {
       // Smooth magnetic dribble right at the player's boots
-      const dribbleDist = 1.18;
+      const dribbleDist = 0.98;
       const targetX = owner.x + Math.cos(owner.facing) * dribbleDist;
       const targetZ = owner.z + Math.sin(owner.facing) * dribbleDist;
       this.ball.x += (targetX - this.ball.x) * Math.min(1, dt * 22);
