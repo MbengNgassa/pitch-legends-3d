@@ -28,7 +28,7 @@ class ModelLoader {
       return this.manifest;
     }
     if (!this._manifestPromise) {
-      this._manifestPromise = fetch('/models/manifest.json')
+      this._manifestPromise = fetch('./models/manifest.json')
         .then((res) => (res.ok ? res.json() : {}))
         .catch(() => ({}))
         .then((json) => {

@@ -1670,6 +1670,10 @@ select:focus {
     padding: 7px 10px;
   }
 
+  .controls-legend {
+    display: none;
+  }
+
   .touch-joystick-zone {
     left: 12px;
     bottom: 16px;

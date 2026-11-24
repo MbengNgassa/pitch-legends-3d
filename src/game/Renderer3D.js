@@ -23,12 +23,17 @@ export class Renderer3D {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(42, initW / initH, 0.5, 420);
 
+    const isMobile = initW < 820;
+
     try {
-      this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      this.renderer = new THREE.WebGLRenderer({
+        antialias: !isMobile,
+        powerPreference: isMobile ? 'default' : 'high-performance',
+      });
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
       this.renderer.setSize(initW, initH);
       this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.shadowMap.type = THREE.PCFShadowMap;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.12;
       this.container.appendChild(this.renderer.domElement);
@@ -57,7 +62,11 @@ export class Renderer3D {
 
     this._setupResize();
     if (this.webglReady) {
-      this.loadShowcase('bernabeu');
+      try {
+        this.loadShowcase('bernabeu');
+      } catch (err) {
+        console.warn('[Renderer3D] Showcase init error:', err);
+      }
     }
   }
 
@@ -97,8 +106,9 @@ export class Renderer3D {
     const [sx, sy, sz] = stadium.sunPos || [45, 72, 32];
     sun.position.set(sx, sy, sz);
     sun.castShadow = true;
-    sun.shadow.mapSize.width = 2048;
-    sun.shadow.mapSize.height = 2048;
+    const shadowRes = (window.innerWidth || 800) < 820 ? 1024 : 2048;
+    sun.shadow.mapSize.width = shadowRes;
+    sun.shadow.mapSize.height = shadowRes;
     sun.shadow.camera.near = 10;
     sun.shadow.camera.far = 210;
     const d = 54;

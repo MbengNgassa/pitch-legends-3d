@@ -18,7 +18,8 @@ export class HudOverlay {
     this.callbacks = callbacks;
     this.touchState = { mx: 0, mz: 0, sprint: false, shoot: false, pass: false, skill: false };
     this.forceTouchVisible = false;
-    this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    this.isTouchDevice =
+      'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth <= 820;
     this.lastGoalTimestamp = 0;
     this.fulltimeShown = false;
   }

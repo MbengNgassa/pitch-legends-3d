@@ -350,11 +350,20 @@ export function createNameplateSprite(label, accentColor = '#FFFFFF') {
   canvas.height = h;
   const ctx = canvas.getContext('2d');
 
-  // Rounded dark translucent broadcast pill
-  const r = 24;
+  // Rounded dark translucent broadcast pill (universally supported across all mobile browsers)
+  const x = 12, y = 10, rw = w - 24, rh = h - 20, r = 22;
   ctx.fillStyle = 'rgba(11, 18, 24, 0.84)';
   ctx.beginPath();
-  ctx.roundRect(12, 10, w - 24, h - 20, r);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + rw - r, y);
+  ctx.quadraticCurveTo(x + rw, y, x + rw, y + r);
+  ctx.lineTo(x + rw, y + rh - r);
+  ctx.quadraticCurveTo(x + rw, y + rh, x + rw - r, y + rh);
+  ctx.lineTo(x + r, y + rh);
+  ctx.quadraticCurveTo(x, y + rh, x, y + rh - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
   ctx.fill();
 
   ctx.strokeStyle = accentColor;

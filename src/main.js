@@ -86,7 +86,6 @@ class PitchLegendsApp {
     this.uiRoot = document.getElementById('ui-root');
     this.hudRoot = document.getElementById('hud-root');
 
-    this.renderer = new Renderer3D(this.canvasRoot);
     this.hud = new HudOverlay(this.hudRoot, {
       onToggleMute: () => {
         const next = !soundEngine.muted;
@@ -111,12 +110,25 @@ class PitchLegendsApp {
       this.prefillRoomCode = '';
     }
 
+    // Render UI first so the user NEVER sees a blank screen while 3D initializes
     this.renderUI();
+
+    try {
+      this.renderer = new Renderer3D(this.canvasRoot);
+    } catch (err) {
+      console.warn('[App] Renderer3D init failed:', err);
+      this.renderer = { loadShowcase() {}, loadMatch() {}, handleMatchEvents() {}, render() {} };
+    }
+
     this._startLoop();
   }
 
   _fetchNetworkInfo() {
-    if (!window.location.host || !window.location.protocol.startsWith('http')) {
+    if (
+      !window.location.host ||
+      !window.location.protocol.startsWith('http') ||
+      window.location.hostname.endsWith('github.io')
+    ) {
       return;
     }
     fetch('/api/network-info')

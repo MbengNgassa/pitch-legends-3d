@@ -7,6 +7,7 @@ export default defineConfig({
     port: 5173,
   },
   build: {
+    target: 'es2019',
     outDir: 'dist',
     emptyOutDir: true,
   },
