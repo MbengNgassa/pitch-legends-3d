@@ -243,6 +243,16 @@ export class Renderer3D {
         this._spawnBurst(ev.x, 0.4, ev.z, '#4ADE80', 7, 4.5);
       } else if (ev.type === 'skill') {
         this._spawnBurst(ev.x, 1.0, ev.z, ev.color || '#38BDF8', 14, 6.2);
+      } else if (ev.type === 'slide_start') {
+        this._spawnBurst(ev.x, 0.25, ev.z, '#4ADE80', 11, 4.8);
+      } else if (ev.type === 'slide_win') {
+        this.shakeAmount = Math.max(this.shakeAmount, 0.26);
+        this._spawnBurst(ev.x, 0.45, ev.z, '#EF4444', 15, 6.5);
+      } else if (ev.type === 'barge_start') {
+        this._spawnBurst(ev.x, 0.9, ev.z, '#F59E0B', 8, 4.2);
+      } else if (ev.type === 'barge_hit') {
+        this.shakeAmount = Math.max(this.shakeAmount, 0.28);
+        this._spawnBurst(ev.x, 1.15, ev.z, '#F59E0B', 16, 6.8);
       } else if (ev.type === 'wall') {
         const sparkColor = this.stadiumData?.railColor || this.stadiumData?.ledColor || '#38BDF8';
         this._spawnBurst(ev.x, Math.max(0.5, ev.y || 0.6), ev.z, sparkColor, 10, 5.5);
@@ -414,6 +424,9 @@ export class Renderer3D {
         localPlayerState = ps;
       }
       pm.updateFromState(ps, humanInfo, b.ownerId === ps.id, clampedDt, this.elapsed);
+      if (ps.defAction === 'slide' && Math.random() < 0.65) {
+        this._spawnBurst(ps.x, 0.18, ps.z, '#4ADE80', 2, 2.4);
+      }
     }
 
     // Broadcast Dynamic Camera (or Goal Celebration Orbit Camera!)

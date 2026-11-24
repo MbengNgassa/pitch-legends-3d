@@ -393,14 +393,26 @@ export class PlayerMesh {
     while (diff < -Math.PI) diff += Math.PI * 2;
     this.bodyRoot.rotation.y += diff * Math.min(1, dt * 18);
 
-    // Distinct silky choreography for each of the 5 situational Skill Moves!
+    // Distinct silky choreography for 5 Attack Skill Moves + 3 Defensive Tackles!
     const skillActive = state.skillTimer > 0;
     const skillType = state.skillType || 'roulette';
     const skillDur = state.skillDuration || 0.55;
     const skillProg = skillActive ? Math.max(0, Math.min(1, 1 - state.skillTimer / skillDur)) : 0;
     const skillDir = state.skillDir || 1;
 
-    if (skillActive) {
+    const defActive = state.defTimer > 0 && Boolean(state.defAction);
+    const defAction = state.defAction || '';
+    const defDur = state.defDuration || 0.45;
+    const defProg = defActive ? Math.max(0, Math.min(1, 1 - state.defTimer / defDur)) : 0;
+
+    if (defActive) {
+      this.skillRing.visible = true;
+      const defColors = { slide: '#EF4444', barge: '#F59E0B', poke: '#22C55E' };
+      this.skillRingMat.color.set(defColors[defAction] || '#EF4444');
+      const ringScale = 0.92 + defProg * 0.95;
+      this.skillRing.scale.set(ringScale, ringScale, 1);
+      this.skillRingMat.opacity = (1 - defProg) * 0.9;
+    } else if (skillActive) {
       this.skillRing.visible = true;
       const ringColors = {
         roulette: '#38BDF8',
@@ -468,13 +480,13 @@ export class PlayerMesh {
       this.nameSprite.visible = false;
     }
 
-    // Procedural limb & skill animations (running stride, lean, goalkeeper dive, 5 skill moves)
+    // Procedural limb, skill & defensive tackle animations
     if (!this.hasCustomModel) {
       const speed = Math.hypot(state.vx, state.vz);
       const strideAmp = Math.min(0.85, speed * 0.075);
       const cycle = state.runCycle || 0;
 
-      // Reset lateral/roll offsets cleanly each frame
+      // Reset lateral/roll/pitch offsets cleanly each frame
       this.proceduralRig.position.z *= 0.72;
       this.leftLeg.rotation.x *= 0.7;
       this.rightLeg.rotation.x *= 0.7;
@@ -482,17 +494,56 @@ export class PlayerMesh {
       if (state.diveTimer > 0) {
         // Dramatic goalkeeper outstretched dive!
         this.proceduralRig.rotation.y = 0;
+        this.proceduralRig.rotation.z = 0;
         this.proceduralRig.rotation.x = (state.diveDir || 1) * 1.15;
         this.proceduralRig.position.y = 0.55;
         this.leftArm.rotation.z = 2.4;
         this.rightArm.rotation.z = 2.4;
         this.leftLeg.rotation.z = -0.25;
         this.rightLeg.rotation.z = 0.25;
+      } else if (defActive) {
+        if (defAction === 'slide') {
+          // Authentic low-to-the-turf football Slide Tackle (feet first!)
+          const slideCurve = defProg < 0.72 ? Math.min(1, defProg / 0.14) : Math.max(0, (1 - defProg) / 0.28);
+          this.proceduralRig.rotation.y = 0.18 * slideCurve;
+          this.proceduralRig.rotation.x = -0.22 * slideCurve;
+          this.proceduralRig.rotation.z = 1.18 * slideCurve;
+          this.proceduralRig.position.y = -0.54 * slideCurve;
+          this.torso.rotation.z = -0.15;
+          this.rightLeg.rotation.z = 0.22 * slideCurve; // Straight sweeping boot forward!
+          this.leftLeg.rotation.z = -0.82 * slideCurve; // Tucked trailing knee!
+          this.leftArm.rotation.z = -1.05 * slideCurve;
+          this.rightArm.rotation.z = 0.78 * slideCurve;
+        } else if (defAction === 'barge') {
+          // Physical Shoulder Barge: drop center of gravity & drive tucked shoulder forward!
+          const peak = Math.sin(defProg * Math.PI);
+          this.proceduralRig.rotation.z = 0;
+          this.proceduralRig.rotation.y = 0.42 * peak;
+          this.proceduralRig.rotation.x = 0.46 * peak;
+          this.proceduralRig.position.y = -0.15 * peak;
+          this.torso.rotation.z = -0.36 * peak;
+          this.leftLeg.rotation.z = Math.sin(cycle) * strideAmp * 1.1;
+          this.rightLeg.rotation.z = -Math.sin(cycle) * strideAmp * 1.1;
+          this.leftArm.rotation.z = 0.28;
+          this.rightArm.rotation.z = -0.28;
+        } else {
+          // Crisp Standing Poke Tackle lunge
+          const peak = Math.sin(defProg * Math.PI);
+          this.proceduralRig.rotation.z = 0;
+          this.proceduralRig.rotation.y = 0;
+          this.proceduralRig.rotation.x = 0;
+          this.proceduralRig.position.y = -0.1 * peak;
+          this.torso.rotation.z = -0.34 * peak;
+          this.rightLeg.rotation.z = 1.15 * peak;
+          this.leftLeg.rotation.z = -0.55 * peak;
+          this.leftArm.rotation.z = -0.65 * peak;
+          this.rightArm.rotation.z = 0.65 * peak;
+        }
       } else if (skillActive) {
+        this.proceduralRig.rotation.z *= 0.65;
         const sinP = Math.sin(skillProg * Math.PI);
 
         if (skillType === 'roulette') {
-          // Silky cubic-eased single 360° Marseille Roulette spin
           const eased =
             skillProg < 0.5
               ? 4 * skillProg * skillProg * skillProg
@@ -506,7 +557,6 @@ export class PlayerMesh {
           this.leftArm.rotation.z = 0.45;
           this.rightArm.rotation.z = -0.45;
         } else if (skillType === 'rainbow') {
-          // Neymar / Okocha Rainbow Flick: athletic heel-pop lift + sprint burst underneath!
           const flickPhase = skillProg < 0.4 ? Math.sin((skillProg / 0.4) * Math.PI) : 0;
           this.proceduralRig.rotation.y = 0;
           this.proceduralRig.rotation.x = 0;
@@ -517,7 +567,6 @@ export class PlayerMesh {
           this.leftArm.rotation.z = flickPhase > 0.05 ? 0.72 : -Math.sin(cycle) * strideAmp * 0.78;
           this.rightArm.rotation.z = flickPhase > 0.05 ? 0.55 : Math.sin(cycle) * strideAmp * 0.78;
         } else if (skillType === 'elastico') {
-          // Ronaldinho Flip-Flap: snappy outside feint then explosive inside whip!
           const whip =
             skillProg < 0.4
               ? -Math.sin((skillProg / 0.4) * Math.PI) * 0.3
@@ -533,7 +582,6 @@ export class PlayerMesh {
           this.leftArm.rotation.z = -0.55 * skillDir;
           this.rightArm.rotation.z = 0.55 * skillDir;
         } else if (skillType === 'stepover') {
-          // Double Step-Over: rapid alternating scissor feints over the ball then sprint drop!
           const feintPhase = skillProg < 0.58;
           const wave = Math.sin(skillProg * Math.PI * 4);
           this.proceduralRig.rotation.y = feintPhase ? wave * 0.22 : 0.16 * skillDir;
@@ -552,7 +600,6 @@ export class PlayerMesh {
           this.leftArm.rotation.z = -wave * 0.55;
           this.rightArm.rotation.z = wave * 0.55;
         } else {
-          // CR7 Heel Chop: sharp planted hop + 45° body cut + back-heel chop!
           const chopPeak = Math.sin(Math.min(1, skillProg / 0.65) * Math.PI);
           this.proceduralRig.rotation.y = chopPeak * 0.68 * skillDir;
           this.proceduralRig.rotation.x = chopPeak * 0.26 * skillDir;
@@ -567,10 +614,12 @@ export class PlayerMesh {
       } else {
         this.proceduralRig.rotation.y *= 0.72;
         this.proceduralRig.rotation.x *= 0.8;
-        this.proceduralRig.position.y = Math.abs(Math.sin(cycle)) * strideAmp * 0.14;
+        this.proceduralRig.rotation.z *= 0.65;
+        const pressDrop = state.pressing ? -0.09 : 0;
+        this.proceduralRig.position.y = pressDrop + Math.abs(Math.sin(cycle)) * strideAmp * 0.14;
 
-        // Forward athletic lean into sprint
-        this.torso.rotation.z = -Math.min(0.24, speed * 0.018);
+        // Forward athletic lean into sprint or low aggressive jockey lean on PRESS
+        this.torso.rotation.z = state.pressing ? -0.32 : -Math.min(0.24, speed * 0.018);
 
         // Running leg & arm swing
         this.leftLeg.rotation.z = Math.sin(cycle) * strideAmp;

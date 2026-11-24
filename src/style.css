@@ -1634,6 +1634,20 @@ select:focus {
   filter: brightness(1.28);
 }
 
+/* Subtle Defense-Mode palette accents so kids immediately feel Attack vs Defense! */
+.touch-buttons-pad.defense-mode .touch-btn.skill {
+  border-color: #f97316;
+  color: #fed7aa;
+  background: radial-gradient(circle at 35% 28%, rgba(249, 115, 22, 0.46) 0%, rgba(62, 24, 8, 0.72) 76%);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45), 0 0 14px rgba(249, 115, 22, 0.3);
+}
+
+.touch-buttons-pad.defense-mode .touch-btn.pass {
+  border-color: #14b8a6;
+  background: radial-gradient(circle at 35% 28%, rgba(20, 184, 166, 0.44) 0%, rgba(8, 44, 42, 0.7) 76%);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45), 0 0 14px rgba(20, 184, 166, 0.28);
+}
+
 /* ===========================
    FULL-TIME MODAL
    =========================== */

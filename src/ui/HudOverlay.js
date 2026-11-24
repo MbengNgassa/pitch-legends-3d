@@ -98,11 +98,11 @@ export class HudOverlay {
           </div>
 
           <div class="controls-legend ${showTouch ? 'hidden' : ''}" id="hud-controls-legend">
-            <span><kbd>WASD</kbd> / <kbd>Arrows</kbd> Move</span>
-            <span><kbd>Space</kbd> / <kbd>J</kbd> Pass &amp; Switch</span>
-            <span><kbd>K</kbd> / <kbd>Shift</kbd> Hold Shoot</span>
-            <span><kbd>E</kbd> / <kbd>L</kbd> Sprint</span>
-            <span><kbd>Q</kbd> Skill Move</span>
+            <span><kbd>WASD</kbd> Move</span>
+            <span><kbd>Space</kbd> Pass / Switch</span>
+            <span><kbd>K</kbd> Shoot / Slide</span>
+            <span><kbd>Q</kbd> Skill / Barge</span>
+            <span><kbd>E</kbd> Sprint / Press</span>
           </div>
         </div>
 
@@ -122,34 +122,11 @@ export class HudOverlay {
               <div class="touch-joystick-knob" id="touch-joystick-knob"></div>
             </div>
           </div>
-          <div class="touch-buttons-pad">
-            <button class="touch-btn skill" data-action="skill" aria-label="Skill Move">
-              <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 3l2.2 5.4L20 10.6l-4.5 3.7 1.4 5.7L12 17l-4.9 3 1.4-5.7L4 10.6l5.8-2.2z"/>
-              </svg>
-              <span class="tb-label">SKILL</span>
-            </button>
-            <button class="touch-btn shoot" data-action="shoot" aria-label="Shoot">
-              <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="8"/>
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
-              </svg>
-              <span class="tb-label">SHOOT</span>
-            </button>
-            <button class="touch-btn pass" data-action="pass" aria-label="Pass or Switch">
-              <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M4 12h14"/>
-                <path d="M13 6l6 6-6 6"/>
-              </svg>
-              <span class="tb-label">PASS</span>
-            </button>
-            <button class="touch-btn sprint" data-action="sprint" aria-label="Sprint">
-              <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M13 2L4 14h7l-1 8 10-12h-7l0-8z"/>
-              </svg>
-              <span class="tb-label">SPRINT</span>
-            </button>
+          <div class="touch-buttons-pad" id="hud-touch-pad">
+            <button class="touch-btn skill" data-action="skill" aria-label="Skill or Barge"></button>
+            <button class="touch-btn shoot" data-action="shoot" aria-label="Shoot or Slide Tackle"></button>
+            <button class="touch-btn pass" data-action="pass" aria-label="Pass or Switch"></button>
+            <button class="touch-btn sprint" data-action="sprint" aria-label="Sprint or Press"></button>
           </div>
         </div>
 
@@ -161,6 +138,9 @@ export class HudOverlay {
     this.radarCanvas = this.root.querySelector('#hud-radar-canvas');
     this.radarCtx = this.radarCanvas ? this.radarCanvas.getContext('2d') : null;
     this._skillPillTimer = null;
+    this._btnModeKey = '';
+    this._isAttackMode = false;
+    this._applyButtonMode('defense-far');
     this._bindEvents();
   }
 
@@ -237,14 +217,14 @@ export class HudOverlay {
       joyZone.addEventListener('pointercancel', resetStick);
     }
 
-    // Touch Action Buttons (latch quick taps on pass/skill so rapid thumb taps never drop between frames!)
-    this._tapLatch = { pass: false, skill: false };
+    // Touch Action Buttons (latch quick taps on pass/skill, plus slide on defense, so rapid thumb taps never drop!)
+    this._tapLatch = { pass: false, skill: false, shoot: false };
     this.root.querySelectorAll('.touch-btn').forEach((btn) => {
       const action = btn.dataset.action;
       const press = (e) => {
         e.preventDefault();
         this.touchState[action] = true;
-        if (action === 'pass' || action === 'skill') {
+        if (action === 'pass' || action === 'skill' || (action === 'shoot' && !this._isAttackMode)) {
           this._tapLatch[action] = true;
         }
         btn.classList.add('pressed');
@@ -261,15 +241,90 @@ export class HudOverlay {
     });
   }
 
+  _applyButtonMode(modeKey) {
+    if (this._btnModeKey === modeKey) return;
+    this._btnModeKey = modeKey;
+    const isAttack = modeKey === 'attack';
+    this._isAttackMode = isAttack;
+
+    const pad = this.root.querySelector('#hud-touch-pad');
+    if (pad) {
+      pad.classList.toggle('defense-mode', !isAttack);
+    }
+
+    const configs = isAttack
+      ? {
+          skill: {
+            label: 'SKILL',
+            svg: '<path d="M12 3l2.2 5.4L20 10.6l-4.5 3.7 1.4 5.7L12 17l-4.9 3 1.4-5.7L4 10.6l5.8-2.2z"/>',
+          },
+          shoot: {
+            label: 'SHOOT',
+            svg: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+          },
+          pass: {
+            label: 'PASS',
+            svg: '<path d="M4 12h14"/><path d="M13 6l6 6-6 6"/>',
+          },
+          sprint: {
+            label: 'SPRINT',
+            svg: '<path d="M13 2L4 14h7l-1 8 10-12h-7l0-8z"/>',
+          },
+        }
+      : {
+          skill: {
+            label: 'BARGE',
+            // Bold shoulder shield / physical impact icon
+            svg: '<path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M9 12h6"/>',
+          },
+          shoot: {
+            label: 'SLIDE',
+            // Sweeping low slide-tackle double chevron & turf slash
+            svg: '<path d="M4 17h16"/><path d="M6 13l5-5 3 3 5-5"/><path d="M15 6h4v4"/>',
+          },
+          pass:
+            modeKey === 'defense-close'
+              ? {
+                  label: 'TACKLE',
+                  // Crisp standing foot-poke tackle icon
+                  svg: '<circle cx="12" cy="12" r="7"/><path d="M9 9l6 6M15 9l-6 6"/>',
+                }
+              : {
+                  label: 'SWITCH',
+                  // Dual swap defender arrows
+                  svg: '<path d="M7 8h11l-3-3"/><path d="M17 16H6l3 3"/>',
+                },
+          sprint: {
+            label: 'PRESS',
+            // Active pressing / closing-in target arrows
+            svg: '<circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
+          },
+        };
+
+    for (const [action, cfg] of Object.entries(configs)) {
+      const btn = this.root.querySelector(`.touch-btn[data-action="${action}"]`);
+      if (!btn) continue;
+      btn.setAttribute('aria-label', cfg.label);
+      btn.innerHTML = `
+        <svg class="tb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          ${cfg.svg}
+        </svg>
+        <span class="tb-label">${cfg.label}</span>
+      `;
+    }
+  }
+
   getTouchInput() {
     const out = {
       ...this.touchState,
       pass: this.touchState.pass || Boolean(this._tapLatch?.pass),
       skill: this.touchState.skill || Boolean(this._tapLatch?.skill),
+      shoot: this.touchState.shoot || Boolean(this._tapLatch?.shoot),
     };
     if (this._tapLatch) {
       this._tapLatch.pass = false;
       this._tapLatch.skill = false;
+      this._tapLatch.shoot = false;
     }
     return out;
   }
@@ -306,10 +361,15 @@ export class HudOverlay {
       }
     }
 
-    // Controlled player status card (name, OVR, stamina, super meter)
+    // Controlled player status card + Context-sensitive Attack / Defense touch buttons!
     const localHuman = snapshot.humans.find((h) => h.slotId === localSlotId);
     const controlled = localHuman ? snapshot.players.find((p) => p.id === localHuman.playerId) : null;
     if (controlled) {
+      const hasBall = snapshot.ball.ownerId === controlled.id;
+      const distToBall = Math.hypot(snapshot.ball.x - controlled.x, snapshot.ball.z - controlled.z);
+      const nextMode = hasBall ? 'attack' : distToBall < 3.8 ? 'defense-close' : 'defense-far';
+      this._applyButtonMode(nextMode);
+
       const roster = controlled.team === 'home' ? this.meta.homeRoster : this.meta.awayRoster;
       const pMeta = roster[controlled.slotIndex];
       const dot = this.root.querySelector('#hud-player-dot');

@@ -209,6 +209,13 @@ export class MatchEngine {
           skillDuration: 0.55,
           skillDir: 1,
           lastSkillType: '',
+          defAction: '',
+          defTimer: 0,
+          defDuration: 0.45,
+          defDirX: dir,
+          defDirZ: 0,
+          defHit: false,
+          pressing: false,
           diveTimer: 0,
           diveDir: 0,
           celebrateTimer: 0,
@@ -266,6 +273,10 @@ export class MatchEngine {
       p.stunTimer = 0;
       p.skillTimer = 0;
       p.skillType = '';
+      p.defAction = '';
+      p.defTimer = 0;
+      p.defHit = false;
+      p.pressing = false;
       p.diveTimer = 0;
       p.celebrateTimer = 0;
       p.shotCharge = 0;
@@ -383,6 +394,8 @@ export class MatchEngine {
       p.kickCooldown = Math.max(0, p.kickCooldown - dt);
       p.stunTimer = Math.max(0, p.stunTimer - dt);
       p.skillTimer = Math.max(0, p.skillTimer - dt);
+      p.defTimer = Math.max(0, p.defTimer - dt);
+      p.pressing = false;
     }
   }
 
@@ -422,12 +435,25 @@ export class MatchEngine {
 
     const inp = human.input;
     const passJustPressed = inp.pass && !inp._prevPass;
+    const shootJustPressed = inp.shoot && !inp._prevShoot;
     const shootJustReleased = !inp.shoot && inp._prevShoot;
     const skillJustPressed = inp.skill && !inp._prevSkill;
 
     const hasBall = this.ball.ownerId === p.id;
+    p.pressing = false;
 
-    // Movement vector + helpful automatic ball-magnet assist when off the ball!
+    // If mid-Slide Tackle / Shoulder Barge / Standing Poke, run its committed trajectory & hitbox!
+    if (p.defTimer > 0) {
+      this._stepActiveDefensiveAction(p, dt);
+      human.shotCharge = 0;
+      p.shotCharge = 0;
+      inp._prevShoot = inp.shoot;
+      inp._prevPass = inp.pass;
+      inp._prevSkill = inp.skill;
+      return;
+    }
+
+    // Movement vector + helpful automatic ball-magnet / Active Press assist when off the ball!
     const mag = Math.hypot(inp.mx, inp.mz);
     let moveX = 0;
     let moveZ = 0;
@@ -440,12 +466,18 @@ export class MatchEngine {
     if (!hasBall) {
       const isPassToMe = !this.ball.ownerId && this.ball.passTargetId === p.id && this.ball.passAssistTimer > 0;
       const isFreeBall = !this.ball.ownerId;
-      const leadT = isFreeBall ? 0.18 : 0.08;
+      const leadT = isFreeBall ? 0.18 : 0.1;
       const ix = clamp(this.ball.x + this.ball.vx * leadT, -PITCH.halfLength + 1, PITCH.halfLength - 1);
       const iz = clamp(this.ball.z + this.ball.vz * leadT, -PITCH.halfWidth + 1, PITCH.halfWidth - 1);
       const toBallX = ix - p.x;
       const toBallZ = iz - p.z;
       const distToBall = Math.hypot(toBallX, toBallZ);
+
+      // Holding PRESS (Sprint button on defense) actively closes down & hounds the ball carrier!
+      const isActivePress = inp.sprint && p.stunTimer <= 0;
+      if (isActivePress) {
+        p.pressing = true;
+      }
 
       if (distToBall > 0.45) {
         const bDir = { x: toBallX / distToBall, z: toBallZ / distToBall };
@@ -460,6 +492,18 @@ export class MatchEngine {
             if (dot > -0.2) {
               moveX = moveX * 0.48 + bDir.x * 0.52;
               moveZ = moveZ * 0.48 + bDir.z * 0.52;
+            }
+          }
+        } else if (isActivePress && distToBall < 34) {
+          // Active Defensive Press / Contain: locks smoothly onto the ball or attacker!
+          if (mag < 0.14) {
+            moveX = bDir.x * 0.98;
+            moveZ = bDir.z * 0.98;
+          } else {
+            const dot = moveX * bDir.x + moveZ * bDir.z;
+            if (dot > -0.15) {
+              moveX = moveX * 0.44 + bDir.x * 0.56;
+              moveZ = moveZ * 0.44 + bDir.z * 0.56;
             }
           }
         } else if (isFreeBall && distToBall < 15) {
@@ -510,7 +554,7 @@ export class MatchEngine {
       p.facing = lerpAngle(p.facing, desiredAngle, Math.min(1, dt * 15));
     }
 
-    // Sprint stamina
+    // Sprint / Press stamina
     const sprinting = inp.sprint && finalMag > 0.1 && p.stamina > 0.06;
     if (sprinting) {
       p.stamina = Math.max(0, p.stamina - dt * 0.32);
@@ -527,7 +571,6 @@ export class MatchEngine {
       const prog = clamp(1 - p.skillTimer / dur, 0, 1);
       const fwdX = finalMag > 0.12 ? moveX : Math.cos(p.facing);
       const fwdZ = finalMag > 0.12 ? moveZ : Math.sin(p.facing);
-      // Perpendicular right vector relative to facing/movement
       const rightX = -fwdZ;
       const rightZ = fwdX;
       const sDir = p.skillDir || 1;
@@ -536,23 +579,18 @@ export class MatchEngine {
       let latMul = 0;
 
       if (p.skillType === 'rainbow') {
-        // Quick heel flick then burst forward under the arcing ball
         fwdMul = prog < 0.25 ? 1.08 : 1.34;
         latMul = Math.sin(prog * Math.PI) * 0.12 * sDir;
       } else if (p.skillType === 'elastico') {
-        // Crisp flip-flap: feint one way, whip sharply past the defender the other way!
         fwdMul = prog < 0.38 ? 1.05 : 1.34;
         latMul = prog < 0.38 ? -0.42 * sDir : 0.62 * sDir;
       } else if (p.skillType === 'stepover') {
-        // Quick double-feint then explosive diagonal acceleration
         fwdMul = prog < 0.42 ? 0.92 : 1.42;
         latMul = prog < 0.42 ? Math.sin(prog * Math.PI * 4) * 0.24 : 0.42 * sDir;
       } else if (p.skillType === 'heelchop') {
-        // Sharp CR7 chop cut diagonally inside / away from defender
         fwdMul = prog < 0.22 ? 0.86 : 1.24;
         latMul = prog < 0.2 ? 0 : 0.68 * sDir;
       } else {
-        // 360° Roulette: tight silky spin glide curving past the marker
         fwdMul = 1.26;
         latMul = Math.sin(prog * Math.PI) * 0.34 * sDir;
       }
@@ -569,28 +607,28 @@ export class MatchEngine {
       p.superMeter = Math.min(100, p.superMeter + dt * 11);
     }
 
-    // Dynamic Situational Skill Move! (Picks best trick for situation + varies moves)
-    if (skillJustPressed && p.skillTimer <= 0 && p.stunTimer <= 0) {
-      const picked = this._pickSkillMove(p, moveX, moveZ, hasBall);
-      p.skillType = picked.move.id;
-      p.skillDuration = picked.move.duration;
-      p.skillTimer = picked.move.duration;
-      p.skillDir = picked.dir;
-      p.lastSkillType = picked.move.id;
-      p.superMeter = Math.min(100, p.superMeter + 14);
-      this._emit('skill', {
-        x: p.x,
-        z: p.z,
-        playerId: p.id,
-        humanSlotId: human.slotId,
-        skillType: picked.move.id,
-        skillLabel: picked.move.label,
-        color: picked.move.color,
-      });
-    }
-
-    // Actions WITH ball: Pass or Charge/Fire Shot
+    // Context-sensitive actions: ATTACK (with ball) vs DEFENSE (without ball)!
     if (hasBall) {
+      // SKILL button on Attack -> 5 Situational Skill Moves!
+      if (skillJustPressed && p.skillTimer <= 0 && p.stunTimer <= 0) {
+        const picked = this._pickSkillMove(p, moveX, moveZ, true);
+        p.skillType = picked.move.id;
+        p.skillDuration = picked.move.duration;
+        p.skillTimer = picked.move.duration;
+        p.skillDir = picked.dir;
+        p.lastSkillType = picked.move.id;
+        p.superMeter = Math.min(100, p.superMeter + 14);
+        this._emit('skill', {
+          x: p.x,
+          z: p.z,
+          playerId: p.id,
+          humanSlotId: human.slotId,
+          skillType: picked.move.id,
+          skillLabel: picked.move.label,
+          color: picked.move.color,
+        });
+      }
+
       if (passJustPressed) {
         this._performPass(p, human, moveX, moveZ);
         human.shotCharge = 0;
@@ -604,27 +642,32 @@ export class MatchEngine {
         p.shotCharge = 0;
       }
     } else {
-      // Clear shot charge if ball lost
+      // Clear shot charge when off the ball
       human.shotCharge = 0;
       p.shotCharge = 0;
 
-      // Without ball: Pass/Switch switches player OR tackles if close!
-      if (passJustPressed) {
+      // DEFENSE BUTTONS:
+      // 1. SHOOT -> SLIDE TACKLE!
+      // 2. SKILL -> SHOULDER BARGE!
+      // 3. PASS  -> STANDING TACKLE (close) OR SWITCH DEFENDER!
+      // 4. SPRINT -> PRESS / CONTAIN (handled above!)
+      if (shootJustPressed && p.kickCooldown <= 0 && p.stunTimer <= 0) {
+        this._startSlideTackle(p, moveX, moveZ);
+      } else if (skillJustPressed && p.kickCooldown <= 0 && p.stunTimer <= 0) {
+        this._startShoulderBarge(p, moveX, moveZ);
+      } else if (passJustPressed) {
         const distToBall = hypot2(this.ball.x - p.x, this.ball.z - p.z);
-        if (distToBall < 3.6) {
-          this._performTackle(p);
+        if (distToBall < 3.8 && p.kickCooldown <= 0 && p.stunTimer <= 0) {
+          this._startStandingPoke(p, moveX, moveZ);
         } else {
-          // Switch to nearest unassigned outfield teammate to the ball
-          const best = this._findBestSwitchCandidate(human);
+          // Switch to nearest (or next-nearest) defender to the ball!
+          const best = this._findBestSwitchCandidate(human, p.id);
           if (best && best.id !== p.id) {
             this._switchHumanToPlayer(human, best);
-          } else {
-            this._performTackle(p);
+          } else if (p.kickCooldown <= 0 && p.stunTimer <= 0) {
+            this._startStandingPoke(p, moveX, moveZ);
           }
         }
-      } else if (inp.shoot && !inp._prevShoot) {
-        // Pressing shoot on defense does a clean slide/poke tackle
-        this._performTackle(p);
       }
     }
 
@@ -740,19 +783,16 @@ export class MatchEngine {
     };
   }
 
-  _findBestSwitchCandidate(human) {
-    let best = null;
-    let bestDist = Infinity;
-    for (const p of this.players) {
-      if (p.team !== human.team || p.isGK) continue;
-      if (p.humanSlotId && p.humanSlotId !== human.slotId) continue;
-      const d = hypot2(p.x - this.ball.x, p.z - this.ball.z);
-      if (d < bestDist) {
-        bestDist = d;
-        best = p;
-      }
+  _findBestSwitchCandidate(human, excludeId = null) {
+    const candidates = this.players
+      .filter((p) => p.team === human.team && !p.isGK && (!p.humanSlotId || p.humanSlotId === human.slotId))
+      .map((p) => ({ p, d: hypot2(p.x - this.ball.x, p.z - this.ball.z) }))
+      .sort((a, b) => a.d - b.d);
+    if (candidates.length === 0) return null;
+    if (excludeId && candidates[0].p.id === excludeId && candidates.length > 1) {
+      return candidates[1].p;
     }
-    return best;
+    return candidates[0].p;
   }
 
   _performPass(passer, human, aimX, aimZ) {
@@ -910,6 +950,216 @@ export class MatchEngine {
         this.ball.lastTouchTeam = tackler.team;
         tackler.superMeter = Math.min(100, tackler.superMeter + 22);
         this._emit('tackle', { x: tackler.x, z: tackler.z });
+      }
+    }
+  }
+
+  _aimDefenseVector(p, moveX, moveZ, assistRange = 9.5) {
+    const raw =
+      Math.hypot(moveX, moveZ) > 0.15
+        ? normalize2(moveX, moveZ)
+        : { x: Math.cos(p.facing), z: Math.sin(p.facing) };
+    const toBallX = this.ball.x + this.ball.vx * 0.14 - p.x;
+    const toBallZ = this.ball.z + this.ball.vz * 0.14 - p.z;
+    const dist = Math.hypot(toBallX, toBallZ);
+    if (dist > 0.3 && dist < assistRange) {
+      const bDir = { x: toBallX / dist, z: toBallZ / dist };
+      const dot = raw.x * bDir.x + raw.z * bDir.z;
+      if (dot > -0.15) {
+        return normalize2(raw.x * 0.32 + bDir.x * 0.68, raw.z * 0.32 + bDir.z * 0.68);
+      }
+    }
+    return raw;
+  }
+
+  _startSlideTackle(p, moveX, moveZ) {
+    const dir = this._aimDefenseVector(p, moveX, moveZ, 10.5);
+    p.defAction = 'slide';
+    p.defDuration = 0.52;
+    p.defTimer = 0.52;
+    p.defDirX = dir.x;
+    p.defDirZ = dir.z;
+    p.defHit = false;
+    p.facing = Math.atan2(dir.z, dir.x);
+    p.kickCooldown = 0.72; // Brief recovery after committing to a slide
+    this._emit('slide_start', { x: p.x, z: p.z, playerId: p.id });
+  }
+
+  _startShoulderBarge(p, moveX, moveZ) {
+    // Target nearest opponent (especially ball carrier!) within barge range
+    let targetDir = this._aimDefenseVector(p, moveX, moveZ, 7.5);
+    let bestOpp = null;
+    let bestDist = 7.2;
+    for (const opp of this.players) {
+      if (opp.team === p.team || opp.isGK) continue;
+      const d = hypot2(opp.x - p.x, opp.z - p.z);
+      const priority = this.ball.ownerId === opp.id ? d - 2.2 : d;
+      if (priority < bestDist) {
+        bestDist = priority;
+        bestOpp = opp;
+      }
+    }
+    if (bestOpp) {
+      targetDir = normalize2(bestOpp.x - p.x, bestOpp.z - p.z);
+    }
+    p.defAction = 'barge';
+    p.defDuration = 0.38;
+    p.defTimer = 0.38;
+    p.defDirX = targetDir.x;
+    p.defDirZ = targetDir.z;
+    p.defHit = false;
+    p.facing = Math.atan2(targetDir.z, targetDir.x);
+    p.kickCooldown = 0.52;
+    this._emit('barge_start', { x: p.x, z: p.z, playerId: p.id });
+  }
+
+  _startStandingPoke(p, moveX, moveZ) {
+    const dir = this._aimDefenseVector(p, moveX, moveZ, 6.0);
+    p.defAction = 'poke';
+    p.defDuration = 0.25;
+    p.defTimer = 0.25;
+    p.defDirX = dir.x;
+    p.defDirZ = dir.z;
+    p.defHit = false;
+    p.facing = Math.atan2(dir.z, dir.x);
+    p.kickCooldown = 0.4;
+  }
+
+  _stepActiveDefensiveAction(p, dt) {
+    const dur = p.defDuration || 0.45;
+    const prog = clamp(1 - p.defTimer / dur, 0, 1);
+
+    if (p.defAction === 'slide') {
+      // Fast explosive slide that glides smoothly to a stop on the grass!
+      const slideMul = prog < 0.65 ? 1.62 - prog * 0.95 : Math.max(0.22, 1.0 - (prog - 0.65) * 2.2);
+      p.vx = p.defDirX * p.speedBase * slideMul;
+      p.vz = p.defDirZ * p.speedBase * slideMul;
+      p.facing = Math.atan2(p.defDirZ, p.defDirX);
+
+      // Active sweeping hitbox during first 75% of the slide!
+      if (!p.defHit && prog < 0.75) {
+        const owner = this._getPlayer(this.ball.ownerId);
+        const distBall = hypot2(this.ball.x - p.x, this.ball.z - p.z);
+
+        if (owner && owner.team !== p.team) {
+          const distOpp = hypot2(owner.x - p.x, owner.z - p.z);
+          // Rainbow flick jumps cleanly over a slide tackle!
+          const jumpedOver = owner.skillTimer > 0 && owner.skillType === 'rainbow';
+          if (!jumpedOver && (distBall < 3.25 || distOpp < 2.95)) {
+            p.defHit = true;
+            owner.stunTimer = 0.72;
+            owner.kickCooldown = 0.68;
+            owner.skillTimer = 0;
+            // Knock opponent slightly off stride
+            owner.vx += p.defDirX * 8;
+            owner.vz += p.defDirZ * 8;
+            // Cleanly poke ball forward into tackler's stride or steal outright!
+            this.ball.ownerId = null;
+            this.ball.lastTouchId = p.id;
+            this.ball.lastTouchTeam = p.team;
+            this.ball.vx = p.defDirX * 14.5;
+            this.ball.vz = p.defDirZ * 14.5;
+            this.ball.vy = 1.6;
+            p.kickCooldown = 0.24; // Quick enough to chase own clean steal!
+            p.superMeter = Math.min(100, p.superMeter + 22);
+            this._emit('slide_win', {
+              x: this.ball.x,
+              z: this.ball.z,
+              playerId: p.id,
+              label: 'SLIDE TACKLE',
+              color: '#EF4444',
+            });
+          }
+        } else if (!owner && distBall < 3.0 && this.ball.y < 1.5) {
+          // Clean sliding interception / clearance on a loose ball!
+          p.defHit = true;
+          this.ball.lastTouchId = p.id;
+          this.ball.lastTouchTeam = p.team;
+          this.ball.vx = p.defDirX * 18;
+          this.ball.vz = p.defDirZ * 18;
+          this.ball.vy = 2.0;
+          p.superMeter = Math.min(100, p.superMeter + 14);
+          this._emit('slide_win', {
+            x: this.ball.x,
+            z: this.ball.z,
+            playerId: p.id,
+            label: 'SLIDE INTERCEPT',
+            color: '#EF4444',
+          });
+        }
+      }
+    } else if (p.defAction === 'barge') {
+      // Aggressive shoulder-drop lunge!
+      const bargeMul = prog < 0.6 ? 1.54 : 0.72;
+      p.vx = p.defDirX * p.speedBase * bargeMul;
+      p.vz = p.defDirZ * p.speedBase * bargeMul;
+      p.facing = Math.atan2(p.defDirZ, p.defDirX);
+
+      if (!p.defHit && prog < 0.78) {
+        for (const opp of this.players) {
+          if (opp.team === p.team || opp.isGK) continue;
+          const dx = opp.x - p.x;
+          const dz = opp.z - p.z;
+          const d = Math.hypot(dx, dz);
+          if (d < 2.85) {
+            p.defHit = true;
+            const push = d > 0.05 ? { x: dx / d, z: dz / d } : { x: p.defDirX, z: p.defDirZ };
+            // Physical shoulder shove knocks the opponent cleanly off balance!
+            opp.x = clamp(opp.x + push.x * 1.15, -PITCH.halfLength + 1, PITCH.halfLength - 1);
+            opp.z = clamp(opp.z + push.z * 1.15, -PITCH.halfWidth + 1, PITCH.halfWidth - 1);
+            opp.vx = push.x * 13;
+            opp.vz = push.z * 13;
+            opp.stunTimer = 0.68;
+            opp.kickCooldown = 0.65;
+            opp.skillTimer = 0;
+
+            if (this.ball.ownerId === opp.id) {
+              this.ball.ownerId = p.id;
+              this.ball.lastTouchId = p.id;
+              this.ball.lastTouchTeam = p.team;
+              p.kickCooldown = 0.15;
+            }
+            p.superMeter = Math.min(100, p.superMeter + 20);
+            this._emit('barge_hit', {
+              x: (p.x + opp.x) * 0.5,
+              z: (p.z + opp.z) * 0.5,
+              playerId: p.id,
+              label: 'SHOULDER BARGE',
+              color: '#F59E0B',
+            });
+            break;
+          }
+        }
+      }
+    } else if (p.defAction === 'poke') {
+      // Crisp standing poke tackle without going to ground!
+      const pokeMul = prog < 0.55 ? 1.2 : 0.65;
+      p.vx = p.defDirX * p.speedBase * pokeMul;
+      p.vz = p.defDirZ * p.speedBase * pokeMul;
+      p.facing = Math.atan2(p.defDirZ, p.defDirX);
+
+      if (!p.defHit && prog < 0.72) {
+        const distBall = hypot2(this.ball.x - p.x, this.ball.z - p.z);
+        const owner = this._getPlayer(this.ball.ownerId);
+        if (owner && owner.team !== p.team && distBall < 3.05) {
+          if (owner.skillTimer <= 0) {
+            p.defHit = true;
+            owner.stunTimer = 0.55;
+            owner.kickCooldown = 0.55;
+            this.ball.ownerId = p.id;
+            this.ball.lastTouchId = p.id;
+            this.ball.lastTouchTeam = p.team;
+            p.kickCooldown = 0.15;
+            p.superMeter = Math.min(100, p.superMeter + 18);
+            this._emit('tackle', {
+              x: p.x,
+              z: p.z,
+              playerId: p.id,
+              label: 'CLEAN TACKLE',
+              color: '#22C55E',
+            });
+          }
+        }
       }
     }
   }
@@ -1207,6 +1457,10 @@ export class MatchEngine {
       p.kickCooldown = Math.max(0, p.kickCooldown - dt);
       p.stunTimer = Math.max(0, p.stunTimer - dt);
       p.skillTimer = Math.max(0, p.skillTimer - dt);
+      if (p.defTimer > 0) {
+        p.defTimer = Math.max(0, p.defTimer - dt);
+        if (p.defTimer === 0) p.defAction = '';
+      }
 
       p.x += p.vx * dt;
       p.z += p.vz * dt;
@@ -1568,6 +1822,10 @@ export class MatchEngine {
         skillType: p.skillTimer > 0 ? p.skillType : '',
         skillDuration: p.skillDuration || 0.55,
         skillDir: p.skillDir || 1,
+        defAction: p.defTimer > 0 ? p.defAction : '',
+        defTimer: Number(p.defTimer.toFixed(2)),
+        defDuration: p.defDuration || 0.45,
+        pressing: Boolean(p.pressing),
         diveTimer: Number(p.diveTimer.toFixed(2)),
         diveDir: p.diveDir,
         shotCharge: Number(p.shotCharge.toFixed(2)),

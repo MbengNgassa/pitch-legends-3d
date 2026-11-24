@@ -344,8 +344,20 @@ class PitchLegendsApp {
       if (ev.type === 'kick') soundEngine.playKick(ev.power || 0.7);
       else if (ev.type === 'supershot') soundEngine.playSuperShot();
       else if (ev.type === 'pass') soundEngine.playPass();
-      else if (ev.type === 'tackle') soundEngine.playTackle();
-      else if (ev.type === 'skill') {
+      else if (ev.type === 'tackle') {
+        soundEngine.playTackle();
+        if (ev.label) this.hud.showSkillCallout(ev.label, ev.color || '#22C55E');
+      } else if (ev.type === 'slide_start') {
+        soundEngine.playSlide();
+      } else if (ev.type === 'slide_win') {
+        soundEngine.playTackle();
+        if (ev.label) this.hud.showSkillCallout(ev.label, ev.color || '#EF4444');
+      } else if (ev.type === 'barge_start') {
+        soundEngine.playPass();
+      } else if (ev.type === 'barge_hit') {
+        soundEngine.playBarge();
+        if (ev.label) this.hud.showSkillCallout(ev.label, ev.color || '#F59E0B');
+      } else if (ev.type === 'skill') {
         soundEngine.playSkill();
         if (ev.skillLabel) {
           this.hud.showSkillCallout(ev.skillLabel, ev.color);
