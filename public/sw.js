@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pitch-legends-3d-v14';
+const CACHE_NAME = 'pitch-legends-3d-v15';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,8 @@ const CORE_ASSETS = [
   './icon.svg',
   './icon-192.png',
   './icon-512.png',
+  './icon-maskable.png',
+  './icon-maskable-192.png',
 ];
 
 self.addEventListener('install', (event) => {

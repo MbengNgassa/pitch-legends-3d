@@ -1,16 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#16A34A"/>
-      <stop offset="100%" stop-color="#0B1218"/>
+      <stop offset="0%" stop-color="#007A5E"/>
+      <stop offset="100%" stop-color="#041E19"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <circle cx="256" cy="256" r="158" fill="#F8FAFC" stroke="#FACC15" stroke-width="18"/>
-  <polygon points="256,162 326,214 300,298 212,298 186,214" fill="#0F172A"/>
-  <polygon points="256,98 292,132 220,132" fill="#0F172A"/>
-  <polygon points="390,210 352,226 376,268" fill="#0F172A"/>
-  <polygon points="122,210 160,226 136,268" fill="#0F172A"/>
-  <polygon points="200,382 224,344 256,374" fill="#0F172A"/>
-  <polygon points="312,382 288,344 256,374" fill="#0F172A"/>
+  <circle cx="256" cy="256" r="196" fill="none" stroke="#FCD116" stroke-width="14"/>
+  <rect x="208" y="64" width="96" height="22" rx="11" fill="#CE1126"/>
+  <text x="256" y="318" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="240" font-weight="900" fill="#FCD116">9</text>
+  <polygon points="256,88 268,124 306,124 275,146 286,182 256,160 226,182 237,146 206,124 244,124" fill="#FCD116"/>
 </svg>

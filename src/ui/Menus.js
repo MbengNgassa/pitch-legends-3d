@@ -204,7 +204,9 @@ export function renderTopBar(profile, backAction = null, title = '', graphicsSet
           backAction
             ? `<button class="btn-ghost" id="menu-back-btn">← Back</button>`
             : `<div class="brand-lockup">
-                <span class="brand-ball" aria-hidden="true">⚽</span>
+                <span class="brand-ball" aria-hidden="true">
+                  <img src="./icon-192.png" alt="Pitch Legends 3D" class="brand-icon-img" onerror="this.parentElement.textContent='9'" />
+                </span>
                 <div>
                   <div class="brand-title">PITCH LEGENDS 3D</div>
                   <div class="brand-sub">Africa &amp; World Edition</div>
@@ -276,7 +278,7 @@ export function renderHomeScreen(profile, installUi = {}, householdCount = 1, gr
           <button class="action-card shop-card" id="home-open-shop">
             <div class="card-kicker">${profile.coins} Coins · ${customClub.name}</div>
             <h3>My Team &amp; Unlocks</h3>
-            <p>Build your custom 5-star team, pick your kit, and unlock Eto'o, Drogba, Pelé &amp; stadiums!</p>
+            <p>Build your 5-star squad and unlock Samuel Eto'o (99), Roger Milla, Ronaldo R9, Pelé &amp; Maradona!</p>
             <span class="card-cta">Build &amp; Unlock →</span>
           </button>
 
