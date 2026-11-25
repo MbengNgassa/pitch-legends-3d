@@ -552,13 +552,18 @@ export function renderMatchSetupScreen(profile, setup, step = 1, activeRegion = 
           </div>
 
           <div class="setup-field">
-            <label>Difficulty</label>
-            <div class="segmented-group">
+            <label>
+              Difficulty Level
+              <span class="diff-bonus-hint">
+                (${DIFFICULTIES[setup.difficulty]?.coinBonus || 1}× Coins)
+              </span>
+            </label>
+            <div class="diff-grid-5">
               ${Object.entries(DIFFICULTIES)
                 .map(
                   ([key, d]) => `
-                <button class="seg-btn ${setup.difficulty === key ? 'selected' : ''}" data-pick-diff="${key}">
-                  ${key === 'rookie' ? 'Rookie' : d.label}
+                <button class="seg-btn diff-btn ${setup.difficulty === key ? 'selected' : ''}" data-pick-diff="${key}">
+                  <span>${d.shortLabel || d.label}</span>
                 </button>
               `
                 )

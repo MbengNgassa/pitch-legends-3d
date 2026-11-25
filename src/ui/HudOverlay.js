@@ -479,37 +479,39 @@ export class HudOverlay {
     modal.innerHTML = `
       <div class="fulltime-card">
         <div class="ft-badge">${resultHeadline}</div>
-        <div class="ft-scoreboard">
-          <div class="ft-club">
-            ${renderClubBadgeSVG(this.homeClub, 56)}
-            <span>${this.homeClub.name}</span>
+        <div class="ft-body-grid">
+          <div class="ft-scoreboard">
+            <div class="ft-club">
+              ${renderClubBadgeSVG(this.homeClub, 48)}
+              <span>${this.homeClub.name}</span>
+            </div>
+            <div class="ft-score">${snapshot.score.home} - ${snapshot.score.away}</div>
+            <div class="ft-club">
+              ${renderClubBadgeSVG(this.awayClub, 48)}
+              <span>${this.awayClub.name}</span>
+            </div>
           </div>
-          <div class="ft-score">${snapshot.score.home} - ${snapshot.score.away}</div>
-          <div class="ft-club">
-            ${renderClubBadgeSVG(this.awayClub, 56)}
-            <span>${this.awayClub.name}</span>
-          </div>
-        </div>
 
-        <div class="ft-rewards">
-          <h3>Match Coins Earned</h3>
-          <div class="ft-reward-rows">
-            <div class="ft-row"><span>Match Played Bonus</span><strong>+${rewards.participation}</strong></div>
-            <div class="ft-row"><span>Goals Scored (${rewards.teamGoals})</span><strong>+${rewards.goalCoins}</strong></div>
-            ${rewards.winCoins > 0 ? `<div class="ft-row"><span>Win Trophy Bonus</span><strong>+${rewards.winCoins}</strong></div>` : ''}
-            ${rewards.cleanSheetCoins > 0 ? `<div class="ft-row"><span>Clean Sheet Bonus</span><strong>+${rewards.cleanSheetCoins}</strong></div>` : ''}
-            <div class="ft-row total"><span>Total Earned</span><strong>+${rewards.total} Coins</strong></div>
+          <div class="ft-rewards">
+            <h3>Match Coins Earned</h3>
+            <div class="ft-reward-rows">
+              <div class="ft-row"><span>Match Bonus</span><strong>+${rewards.participation}</strong></div>
+              <div class="ft-row"><span>Goals (${rewards.teamGoals})</span><strong>+${rewards.goalCoins}</strong></div>
+              ${rewards.winCoins > 0 ? `<div class="ft-row"><span>Win Trophy</span><strong>+${rewards.winCoins}</strong></div>` : ''}
+              ${rewards.cleanSheetCoins > 0 ? `<div class="ft-row"><span>Clean Sheet</span><strong>+${rewards.cleanSheetCoins}</strong></div>` : ''}
+              <div class="ft-row total"><span>Total Earned</span><strong>+${rewards.total} Coins</strong></div>
+            </div>
+            <div class="ft-bank">Bank: <strong>${rewards.newBalance} Coins</strong></div>
           </div>
-          <div class="ft-bank">Your Coin Bank: <strong>${rewards.newBalance} Coins</strong></div>
         </div>
 
         <div class="ft-actions">
           ${
             !this.isMultiplayer || this.isHost
               ? `<button class="btn-primary" id="ft-rematch-btn">Play Again</button>`
-              : `<div class="ft-waiting">Waiting for host to start rematch...</div>`
+              : `<div class="ft-waiting">Waiting for host...</div>`
           }
-          <button class="btn-gold" id="ft-shop-btn">Unlock Players &amp; Stadiums</button>
+          <button class="btn-gold" id="ft-shop-btn">My Team &amp; Unlocks</button>
           <button class="btn-secondary" id="ft-menu-btn">Main Menu</button>
         </div>
       </div>

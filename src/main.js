@@ -63,7 +63,7 @@ class PitchLegendsApp {
       homeClubId: `custom_${this.profile.id}`,
       awayClubId: 'cameroon',
       stadiumId: 'olembe',
-      difficulty: 'rookie',
+      difficulty: 'easy',
       durationSeconds: 120,
     };
 
@@ -456,7 +456,7 @@ class PitchLegendsApp {
 
     const myScore = snapshot.score[myTeam];
     const oppScore = snapshot.score[oppTeam];
-    const diff = DIFFICULTIES[this.matchMeta?.difficulty || 'rookie'] || DIFFICULTIES.rookie;
+    const diff = DIFFICULTIES[this.matchMeta?.difficulty || 'easy'] || DIFFICULTIES.easy;
 
     const outcome = myScore > oppScore ? 'win' : myScore === oppScore ? 'draw' : 'loss';
     const participation = 80;

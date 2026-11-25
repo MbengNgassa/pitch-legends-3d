@@ -14,38 +14,70 @@ export const PITCH = {
 };
 
 export const DIFFICULTIES = {
-  rookie: {
-    label: 'Rookie (Kid Mode)',
-    aiSpeedMul: 0.72,
-    aiReaction: 0.65,
-    aiShootPower: 0.78,
-    aiTackleRange: 1.55,
-    gkSpeedMul: 0.74,
-    humanMagnetBonus: 0.52,
-    humanAimAssist: 0.58,
+  easy: {
+    label: 'Easy',
+    shortLabel: 'Easy',
+    aiSpeedMul: 0.8,
+    aiReaction: 0.78,
+    aiShootPower: 0.86,
+    aiTackleRange: 1.72,
+    aiPassRate: 1.25,
+    gkSpeedMul: 0.84,
+    humanMagnetBonus: 0.46,
+    humanAimAssist: 0.54,
     coinBonus: 1.0,
+  },
+  medium: {
+    label: 'Medium',
+    shortLabel: 'Medium',
+    aiSpeedMul: 0.88,
+    aiReaction: 0.85,
+    aiShootPower: 0.92,
+    aiTackleRange: 1.86,
+    aiPassRate: 1.65,
+    gkSpeedMul: 0.92,
+    humanMagnetBonus: 0.38,
+    humanAimAssist: 0.44,
+    coinBonus: 1.15,
   },
   pro: {
     label: 'Pro',
-    aiSpeedMul: 0.89,
-    aiReaction: 0.85,
-    aiShootPower: 0.92,
-    aiTackleRange: 1.85,
-    gkSpeedMul: 0.9,
-    humanMagnetBonus: 0.34,
-    humanAimAssist: 0.38,
-    coinBonus: 1.25,
+    shortLabel: 'Pro',
+    aiSpeedMul: 0.96,
+    aiReaction: 0.93,
+    aiShootPower: 0.99,
+    aiTackleRange: 2.0,
+    aiPassRate: 2.1,
+    gkSpeedMul: 1.0,
+    humanMagnetBonus: 0.3,
+    humanAimAssist: 0.34,
+    coinBonus: 1.3,
+  },
+  worldclass: {
+    label: 'World Class',
+    shortLabel: 'W. Class',
+    aiSpeedMul: 1.03,
+    aiReaction: 1.0,
+    aiShootPower: 1.06,
+    aiTackleRange: 2.14,
+    aiPassRate: 2.5,
+    gkSpeedMul: 1.07,
+    humanMagnetBonus: 0.24,
+    humanAimAssist: 0.26,
+    coinBonus: 1.5,
   },
   legend: {
     label: 'Legend',
-    aiSpeedMul: 1.01,
-    aiReaction: 0.98,
-    aiShootPower: 1.04,
-    aiTackleRange: 2.05,
-    gkSpeedMul: 1.04,
-    humanMagnetBonus: 0.22,
-    humanAimAssist: 0.22,
-    coinBonus: 1.5,
+    shortLabel: 'Legend',
+    aiSpeedMul: 1.1,
+    aiReaction: 1.08,
+    aiShootPower: 1.12,
+    aiTackleRange: 2.26,
+    aiPassRate: 2.9,
+    gkSpeedMul: 1.14,
+    humanMagnetBonus: 0.2,
+    humanAimAssist: 0.2,
+    coinBonus: 1.75,
   },
 };
 
@@ -98,8 +130,9 @@ export class MatchEngine {
     this.homeClubId = config.homeClubId || 'real-madrid';
     this.awayClubId = config.awayClubId || 'man-city';
     this.stadiumId = config.stadiumId || 'sunlit-park';
-    this.difficultyKey = config.difficulty || 'rookie';
-    this.diff = DIFFICULTIES[this.difficultyKey] || DIFFICULTIES.rookie;
+    const reqDiff = config.difficulty === 'rookie' ? 'easy' : config.difficulty || 'easy';
+    this.difficultyKey = DIFFICULTIES[reqDiff] ? reqDiff : 'easy';
+    this.diff = DIFFICULTIES[this.difficultyKey];
     this.matchDuration = config.durationSeconds || 120; // 2 minutes default for brisk fun
 
     this.homeClub = config.homeClubData || getClubById(this.homeClubId);
@@ -1268,26 +1301,65 @@ export class MatchEngine {
       const goalX = attackDir * PITCH.halfLength;
       const distToGoal = hypot2(goalX - p.x, 0 - p.z);
 
-      // If teammate is human and open ahead, pass to the kid! Kids love getting passes!
+      // Measure closest opponent pressure on this AI ball carrier
+      let nearestOppDist = Infinity;
+      for (const opp of this.players) {
+        if (opp.team === p.team) continue;
+        const od = hypot2(p.x - opp.x, p.z - opp.z);
+        if (od < nearestOppDist) nearestOppDist = od;
+      }
+
+      // 1. If a human teammate is open ahead, feed the human player!
       const humanMates = this.players.filter((m) => m.team === p.team && m.humanSlotId && m.id !== p.id);
       for (const hm of humanMates) {
         const ahead = (hm.x - p.x) * attackDir > -4;
         const d = hypot2(hm.x - p.x, hm.z - p.z);
-        if (ahead && d > 5 && d < 28 && Math.random() < dt * 2.2) {
+        if (ahead && d > 5 && d < 32 && Math.random() < dt * 2.4) {
           const dir = normalize2(hm.x - p.x, hm.z - p.z);
           this._performPass(p, null, dir.x, dir.z);
           return;
         }
       }
 
-      // Shoot when within range
-      if (distToGoal < 20 && Math.random() < dt * 2.4 * this.diff.aiReaction) {
-        const toGoal = normalize2(goalX - p.x, (Math.random() - 0.5) * 6 - p.z);
-        this._performShot(p, 0.58 + Math.random() * 0.32, toGoal.x, toGoal.z, false);
+      // 2. Shoot purposefully toward the far/open corner when within striking range!
+      const shootRange = 24 + this.diff.aiReaction * 4.5;
+      if (distToGoal < shootRange && Math.random() < dt * (distToGoal < 16 ? 4.4 : 2.6) * this.diff.aiReaction) {
+        const cornerZ = (p.z >= 0 ? -1 : 1) * (PITCH.goalHalfWidth * (0.45 + Math.random() * 0.35));
+        const toGoal = normalize2(goalX - p.x, cornerZ - p.z);
+        this._performShot(p, 0.62 + Math.random() * 0.3, toGoal.x, toGoal.z, false);
         return;
       }
 
-      // Dribble toward opponent goal while weaving gently away from nearest defender
+      // 3. Smart AI Team Passing! Pass to an open attacking teammate when pressured or launching a break!
+      const passRate = (this.diff.aiPassRate || 1.4) * (nearestOppDist < 6.8 ? 1.85 : 0.75);
+      if (Math.random() < dt * passRate) {
+        let bestMate = null;
+        let bestScore = -Infinity;
+        for (const mate of this.players) {
+          if (mate.team !== p.team || mate.id === p.id || mate.isGK) continue;
+          const gain = (mate.x - p.x) * attackDir;
+          const dist = hypot2(mate.x - p.x, mate.z - p.z);
+          if (dist < 7 || dist > 44 || gain < -4) continue;
+          // Prefer teammates further upfield and in open space
+          let mateSpace = 12;
+          for (const opp of this.players) {
+            if (opp.team === p.team) continue;
+            mateSpace = Math.min(mateSpace, hypot2(mate.x - opp.x, mate.z - opp.z));
+          }
+          const score = gain * 0.9 + mateSpace * 1.3 - dist * 0.15;
+          if (score > bestScore) {
+            bestScore = score;
+            bestMate = mate;
+          }
+        }
+        if (bestMate && bestScore > 6) {
+          const dir = normalize2(bestMate.x - p.x, bestMate.z - p.z);
+          this._performPass(p, null, dir.x, dir.z);
+          return;
+        }
+      }
+
+      // 4. Dribble dynamically toward goal while weaving smoothly around nearby defenders
       let steerX = goalX - p.x;
       let steerZ = -p.z * 0.35;
       for (const opp of this.players) {
@@ -1295,15 +1367,15 @@ export class MatchEngine {
         const odx = p.x - opp.x;
         const odz = p.z - opp.z;
         const od = Math.hypot(odx, odz);
-        if (od < 5.5 && od > 0.1) {
-          steerX += (odx / od) * 6;
-          steerZ += (odz / od) * 8;
+        if (od < 6.2 && od > 0.1) {
+          steerX += (odx / od) * 6.5;
+          steerZ += (odz / od) * 9.0;
         }
       }
       const n = normalize2(steerX, steerZ);
-      p.vx = n.x * aiSpeed * 0.9;
-      p.vz = n.z * aiSpeed * 0.9;
-      p.facing = lerpAngle(p.facing, Math.atan2(n.z, n.x), Math.min(1, dt * 10));
+      p.vx = n.x * aiSpeed * 0.94;
+      p.vz = n.z * aiSpeed * 0.94;
+      p.facing = lerpAngle(p.facing, Math.atan2(n.z, n.x), Math.min(1, dt * 11));
       return;
     }
 

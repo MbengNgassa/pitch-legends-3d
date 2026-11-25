@@ -100,7 +100,7 @@ export class RoomManager {
         homeClubId: msg.config?.homeClubId || 'real-madrid',
         awayClubId: msg.config?.awayClubId || 'man-city',
         stadiumId: msg.config?.stadiumId || 'sunlit-park',
-        difficulty: msg.config?.difficulty || 'rookie',
+        difficulty: msg.config?.difficulty || 'easy',
         durationSeconds: msg.config?.durationSeconds || 120,
         homeDraft: Array.isArray(msg.config?.homeDraft) ? msg.config.homeDraft : [],
         awayDraft: [],
