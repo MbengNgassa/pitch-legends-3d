@@ -859,10 +859,10 @@ export class MatchEngine {
 
     if (bestTarget && bestScore > -0.35) {
       const rawDist = hypot2(bestTarget.x - passer.x, bestTarget.z - passer.z);
-      const estFlight = clamp(rawDist / 32, 0.18, 0.72);
+      const estFlight = clamp(rawDist / 38, 0.16, 0.78);
       // Lead pass cleanly into the receiver's running stride (extra through-ball lead if attacking!)
       const attackingRun = (bestTarget.x - passer.x) * attackDir > 3;
-      const throughLead = attackingRun ? attackDir * clamp(rawDist * 0.12, 1.5, 4.5) : 0;
+      const throughLead = attackingRun ? attackDir * clamp(rawDist * 0.12, 1.5, 4.8) : 0;
       const leadX = clamp(
         bestTarget.x + bestTarget.vx * estFlight * 0.68 + throughLead,
         -PITCH.halfLength + 3,
@@ -878,25 +878,37 @@ export class MatchEngine {
       const dz = leadZ - passer.z;
       const dist = Math.hypot(dx, dz);
       passDir = normalize2(dx, dz);
-      // Crisp drag-compensated speed so passes ALWAYS reach the teammate with zip!
-      speed = clamp(23 + dist * 0.68 + (passer.data.pas / 100) * 6, 24, 44);
+      // Strong distance-scaled driven pass so far teammates receive crisp, fast balls!
+      speed = clamp(24 + dist * 0.94 + (passer.data.pas / 100) * 6, 25, 66);
       chosenTargetId = bestTarget.id;
 
       // If passer was human and receiver is AI, seamlessly switch control to the receiver!
       if (human && !bestTarget.humanSlotId) {
         this._switchHumanToPlayer(human, bestTarget);
       }
+    } else {
+      // Unassisted directional long ball / clearance still has crisp punch
+      speed = clamp(32 + (passer.data.pas / 100) * 8, 32, 46);
     }
+
+    const passDist = chosenTargetId
+      ? hypot2(
+          (this._getPlayer(chosenTargetId)?.x ?? passer.x) - passer.x,
+          (this._getPlayer(chosenTargetId)?.z ?? passer.z) - passer.z
+        )
+      : 28;
+    // Driven low pass up close; lofted zippy ping over defenders when passing far!
+    const passLoft = passDist > 20 ? clamp(1.6 + (passDist - 20) * 0.12, 1.6, 6.4) : 1.1;
 
     this.ball.ownerId = null;
     this.ball.lastTouchId = passer.id;
     this.ball.lastTouchTeam = passer.team;
     this.ball.passTargetId = chosenTargetId;
-    this.ball.passAssistTimer = chosenTargetId ? 1.45 : 0;
+    this.ball.passAssistTimer = chosenTargetId ? clamp(1.0 + passDist / 30, 1.45, 2.6) : 0;
     this.ball.isSuper = false;
     this.ball.vx = passDir.x * speed;
     this.ball.vz = passDir.z * speed;
-    this.ball.vy = speed > 34 ? 2.4 : 1.2;
+    this.ball.vy = passLoft;
     passer.kickCooldown = 0.26;
     passer.superMeter = Math.min(100, passer.superMeter + 18);
 
@@ -971,7 +983,7 @@ export class MatchEngine {
     const distToBall = hypot2(this.ball.x - tackler.x, this.ball.z - tackler.z);
     if (distToBall < 2.8) {
       const owner = this._getPlayer(this.ball.ownerId);
-      if (owner && owner.team !== tackler.team) {
+      if (owner && !owner.isGK && owner.team !== tackler.team) {
         if (owner.skillTimer > 0) {
           // Skill spin dodged the tackle!
           return;
@@ -1074,7 +1086,7 @@ export class MatchEngine {
         const owner = this._getPlayer(this.ball.ownerId);
         const distBall = hypot2(this.ball.x - p.x, this.ball.z - p.z);
 
-        if (owner && owner.team !== p.team) {
+        if (owner && !owner.isGK && owner.team !== p.team) {
           const distOpp = hypot2(owner.x - p.x, owner.z - p.z);
           // Rainbow flick jumps cleanly over a slide tackle!
           const jumpedOver = owner.skillTimer > 0 && owner.skillType === 'rainbow';
@@ -1174,7 +1186,7 @@ export class MatchEngine {
       if (!p.defHit && prog < 0.72) {
         const distBall = hypot2(this.ball.x - p.x, this.ball.z - p.z);
         const owner = this._getPlayer(this.ball.ownerId);
-        if (owner && owner.team !== p.team && distBall < 3.05) {
+        if (owner && !owner.isGK && owner.team !== p.team && distBall < 3.05) {
           if (owner.skillTimer <= 0) {
             p.defHit = true;
             owner.stunTimer = 0.55;
@@ -1203,50 +1215,73 @@ export class MatchEngine {
     const goalLineX = -dir * (PITCH.halfLength - 2.4);
     const hasBall = this.ball.ownerId === gk.id;
 
-    if (gk.diveTimer > 0) {
-      gk.diveTimer = Math.max(0, gk.diveTimer - dt);
-      gk.vx *= 0.88;
-      gk.vz *= 0.92;
-      return;
-    }
-
     if (hasBall) {
+      gk.diveTimer = 0;
       gk.vx = 0;
       gk.vz = 0;
       gk.facing = dir > 0 ? 0 : Math.PI;
-      // Hold briefly, then kick/punt crisply upfield to an open teammate (favoring human teammates!)
+      // Hold briefly, then ALWAYS launch a crisp, unblocked pass/punt straight to an open teammate!
       if (gk.kickCooldown <= 0) {
         const mates = this.players.filter((p) => p.team === gk.team && !p.isGK);
-        mates.sort((a, b) => {
-          const ha = a.humanSlotId ? -22 : 0;
-          const hb = b.humanSlotId ? -22 : 0;
-          const da = Math.abs(a.x - gk.x);
-          const db = Math.abs(b.x - gk.x);
-          return (ha + da) - (hb + db);
-        });
-        const target = mates[0];
-        if (target) {
-          const leadX = clamp(target.x + dir * 4, -PITCH.halfLength + 6, PITCH.halfLength - 6);
-          const leadZ = clamp(target.z, -PITCH.halfWidth + 5, PITCH.halfWidth - 5);
+        let bestTarget = mates[0] || null;
+        let bestScore = -Infinity;
+
+        for (const mate of mates) {
+          const dist = hypot2(mate.x - gk.x, mate.z - gk.z);
+          let nearestOpp = 20;
+          for (const opp of this.players) {
+            if (opp.team === gk.team) continue;
+            nearestOpp = Math.min(nearestOpp, hypot2(mate.x - opp.x, mate.z - opp.z));
+          }
+          const humanBonus = mate.humanSlotId ? 10 : 0;
+          const openness = Math.min(16, nearestOpp) * 1.6;
+          const score = openness + humanBonus - dist * 0.28;
+          if (score > bestScore) {
+            bestScore = score;
+            bestTarget = mate;
+          }
+        }
+
+        if (bestTarget) {
+          const leadX = clamp(bestTarget.x + bestTarget.vx * 0.35 + dir * 2.5, -PITCH.halfLength + 6, PITCH.halfLength - 6);
+          const leadZ = clamp(bestTarget.z + bestTarget.vz * 0.35, -PITCH.halfWidth + 5, PITCH.halfWidth - 5);
           const dx = leadX - gk.x;
           const dz = leadZ - gk.z;
           const dist = Math.hypot(dx, dz);
           const d = normalize2(dx, dz);
-          const kickSpeed = clamp(28 + dist * 0.62, 30, 46);
+          const kickSpeed = clamp(28 + dist * 0.96, 30, 68);
+          const kickLoft = dist > 20 ? clamp(4.2 + (dist - 20) * 0.08, 4.2, 8.4) : 3.2;
 
+          gk.facing = Math.atan2(d.z, d.x);
           this.ball.ownerId = null;
+          this.ball.x = gk.x + d.x * 1.5;
+          this.ball.z = gk.z + d.z * 1.5;
+          this.ball.y = 1.65;
           this.ball.lastTouchId = gk.id;
           this.ball.lastTouchTeam = gk.team;
-          this.ball.passTargetId = target.id;
-          this.ball.passAssistTimer = 1.65;
+          this.ball.passTargetId = bestTarget.id;
+          this.ball.passAssistTimer = clamp(1.2 + dist / 28, 1.5, 2.7);
           this.ball.isSuper = false;
           this.ball.vx = d.x * kickSpeed;
           this.ball.vz = d.z * kickSpeed;
-          this.ball.vy = dist > 26 ? 5.8 : 3.2;
-          gk.kickCooldown = 0.65;
-          this._emit('kick', { x: gk.x, z: gk.z, power: 0.8, playerId: gk.id });
+          this.ball.vy = kickLoft;
+          gk.kickCooldown = 0.75;
+
+          const teamHumans = this.humans.filter((h) => h.team === gk.team);
+          if (teamHumans.length === 1 && !bestTarget.humanSlotId) {
+            this._switchHumanToPlayer(teamHumans[0], bestTarget);
+          }
+
+          this._emit('kick', { x: gk.x, z: gk.z, power: 0.85, playerId: gk.id });
         }
       }
+      return;
+    }
+
+    if (gk.diveTimer > 0) {
+      gk.diveTimer = Math.max(0, gk.diveTimer - dt);
+      gk.vx *= 0.88;
+      gk.vz *= 0.92;
       return;
     }
 
@@ -1570,6 +1605,25 @@ export class MatchEngine {
         }
       }
     }
+
+    // Authentic 6-yard protection: keep opposing attackers 5.2m clear when a GK holds the ball!
+    const ballOwner = this._getPlayer(this.ball.ownerId);
+    if (ballOwner && ballOwner.isGK) {
+      const safeDist = 5.2;
+      for (const opp of this.players) {
+        if (opp.team === ballOwner.team) continue;
+        const dx = opp.x - ballOwner.x;
+        const dz = opp.z - ballOwner.z;
+        const d = Math.hypot(dx, dz);
+        if (d < safeDist) {
+          const dir = d > 0.05 ? { x: dx / d, z: dz / d } : { x: ballOwner.team === 'home' ? 1 : -1, z: 0 };
+          opp.x = clamp(ballOwner.x + dir.x * safeDist, -PITCH.halfLength + 1, PITCH.halfLength - 1);
+          opp.z = clamp(ballOwner.z + dir.z * safeDist, -PITCH.halfWidth + 1, PITCH.halfWidth - 1);
+          opp.vx *= 0.25;
+          opp.vz *= 0.25;
+        }
+      }
+    }
   }
 
   _stepBall(dt) {
@@ -1654,7 +1708,7 @@ export class MatchEngine {
             this.ball.lastTouchId = opp.id;
             this.ball.lastTouchTeam = opp.team;
             if (opp.isGK) {
-              opp.kickCooldown = 0.65; // Keeper grabs it cleanly, then kicks it back upfield!
+              opp.kickCooldown = 0.48; // Keeper grabs it cleanly, then passes/punts it right back to a teammate!
               this._emit('save', { x: opp.x, z: opp.z, playerId: opp.id });
             } else {
               this._emit('tackle', { x: opp.x, z: opp.z });
@@ -1689,8 +1743,8 @@ export class MatchEngine {
       if (this.ball.passAssistTimer === 0) this.ball.passTargetId = null;
     }
 
-    // Grass / air friction (smooth pro turf so passes glide crisply without dying short!)
-    const drag = this.ball.y <= PITCH.ballRadius + 0.05 ? Math.pow(0.48, dt) : Math.pow(0.78, dt);
+    // Grass / air friction (crisp pro turf so long passes travel smoothly to far teammates!)
+    const drag = this.ball.y <= PITCH.ballRadius + 0.05 ? Math.pow(0.56, dt) : Math.pow(0.8, dt);
     this.ball.vx *= drag;
     this.ball.vz *= drag;
     this.ball.spinX = this.ball.vz * 1.5;
@@ -1770,10 +1824,12 @@ export class MatchEngine {
     for (const p of this.players) {
       if (p.kickCooldown > 0 || p.stunTimer > 0) continue;
       const dist = hypot2(this.ball.x - p.x, this.ball.z - p.z);
-      const reachY = p.isGK ? 3.2 : 2.1;
+      const isIntendedReceiver = !p.isGK && this.ball.passTargetId === p.id && this.ball.passAssistTimer > 0;
+      const reachY = p.isGK ? 3.2 : isIntendedReceiver ? 2.85 : 2.1;
       if (this.ball.y > reachY) continue;
 
       let pickupRadius = PITCH.playerRadius + PITCH.ballRadius + (p.humanSlotId ? this.diff.humanMagnetBonus : 0.14);
+      if (isIntendedReceiver) pickupRadius += 0.35;
       if (p.isGK) pickupRadius += p.diveTimer > 0 ? 1.1 : 0.55;
 
       if (dist < pickupRadius) {
@@ -1797,7 +1853,7 @@ export class MatchEngine {
         this.ball.lastTouchTeam = p.team;
         this.ball.isSuper = false;
         if (p.isGK) {
-          p.kickCooldown = 0.65; // Hold briefly before distributing
+          p.kickCooldown = 0.48; // Hold briefly, then pass/punt cleanly upfield!
           this._emit('save', { x: p.x, z: p.z, playerId: p.id });
         } else {
           // If an AI teammate on a human's team picks up a loose ball & no other human controls them,
